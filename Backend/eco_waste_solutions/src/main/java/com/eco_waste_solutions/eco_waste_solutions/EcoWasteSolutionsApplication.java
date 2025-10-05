@@ -1,4 +1,4 @@
-	package com.eco_waste_solutions.eco_waste_solutions;
+package com.eco_waste_solutions.eco_waste_solutions;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
