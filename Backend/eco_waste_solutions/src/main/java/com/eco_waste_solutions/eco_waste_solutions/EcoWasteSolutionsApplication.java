@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 public class EcoWasteSolutionsApplication {
-
+	//eeeee
 	public static void main(String[] args) {
 		SpringApplication.run(EcoWasteSolutionsApplication.class, args);
 	}
