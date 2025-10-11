@@ -1,4 +1,4 @@
-package com.eco_waste_solutions.eco_waste_solutions.Waste;
+package com.eco_waste_solutions.eco_waste_solutions.waste;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -21,7 +21,7 @@ public class Waste {
     private String userId;
     private LocalDateTime submissionDate;
     private String submissionMethod; // "Home Pickup" or "Drop-off"
-    private String status;            // "Pending", "Processed", "Completed"
+    private String status; // "Pending", "Processed", "Completed"
     private PickupDetails pickup;
     private double totalWeightKg;
     private double totalPaybackAmount;
@@ -55,7 +55,7 @@ public class Waste {
         private int quantity;
         private double estimatedWeightKg;
         private double estimatedPayback;
-        
+
     }
 
     // New inner class for storing real coordinates
@@ -66,4 +66,4 @@ public class Waste {
         private double latitude;
         private double longitude;
     }
-} 
+}
