@@ -1,13 +1,14 @@
 package com.eco_waste_solutions.eco_waste_solutions.Waste;
 
 import org.bson.types.ObjectId;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Optional;
+
+// Removed import for GeoLocation as it cannot be resolved
 
 @Service
 @RequiredArgsConstructor
@@ -26,8 +27,23 @@ public class WasteService {
     }
 
     // add waste
-    public Waste save(Waste waste) {
+    public Waste save(String userId, String submissionMethod, String status, Waste.PickupDetails pickup,
+            double totalWeightKg, double totalPaybackAmount, String paymentMethod,
+            String paymentStatus, List<Waste.Item> items, String imageUrl, Waste.GeoLocation location) {
+        Waste waste = new Waste();
+        waste.setUserId(userId);
+        waste.setSubmissionMethod(submissionMethod);
+        waste.setStatus(status);
+        waste.setPickup(pickup);
+        waste.setTotalWeightKg(totalWeightKg);
+        waste.setTotalPaybackAmount(totalPaybackAmount);
+        waste.setPaymentMethod(paymentMethod);
+        waste.setPaymentStatus(paymentStatus);
+        waste.setItems(items);
+        waste.setImageUrl(imageUrl);
+        waste.setLocation(location);
         return wasteRepository.save(waste);
+
     }
 
     public void deleteById(ObjectId id) {
@@ -37,9 +53,5 @@ public class WasteService {
     public Waste update(Waste waste) {
         return wasteRepository.save(waste);
     }
-    
-    
-
-
 
 }

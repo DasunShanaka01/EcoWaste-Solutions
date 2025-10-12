@@ -33,6 +33,12 @@ public class Waste {
     // New field: GPS location
     private GeoLocation location;
 
+    //Get date in system default format
+    public String getFormattedSubmissionDate() {
+        return submissionDate != null ? submissionDate.toLocalDate().toString() : null;
+    }
+
+
     // --- Inner classes ---
     @Data
     @AllArgsConstructor
