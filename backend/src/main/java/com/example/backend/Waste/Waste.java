@@ -58,7 +58,7 @@ public class Waste {
     public static class Item {
         private String category;
         private String itemType;
-        private int quantity;
+        private String itemDescription;
         private double estimatedWeightKg;
         private double estimatedPayback;
 
