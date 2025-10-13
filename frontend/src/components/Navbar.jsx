@@ -8,6 +8,7 @@ const Navbar = () => {
         <Link to="/" style={{color: 'white', textDecoration: 'none', fontWeight: '700'}}>EcoWaste</Link>
         <Link to="/" style={{color: 'white', textDecoration: 'none'}}>Home</Link>
         <Link to="/wasteform" style={{color: 'white', textDecoration: 'none'}}>Add Waste</Link>
+        <Link to="/wastecollection" style={{color: 'white', textDecoration: 'none'}}>Waste Collection</Link>
       </div>
     </nav>
   );
