@@ -17,7 +17,12 @@ const WasteForm = () => {
     pickupDate: '',
     pickupTimeSlot: '',
     imageFile: null,
-    imagePreview: null
+    imagePreview: null,
+    location: null,
+    locationAvailable: false,
+    locationError: false,
+    quantity: 1,
+    weight: 0
   });
 
   const categories = [
@@ -31,11 +36,10 @@ const WasteForm = () => {
   const steps = [
     { id: 1, name: 'Submit Recyclables' },
     { id: 2, name: 'Select Method' },
-    { id: 3, name: 'Choose Category' },
-    { id: 4, name: 'Enter Quantity/Weight' },
-    { id: 5, name: 'Payback Calculation' },
-    { id: 6, name: 'Schedule Pickup' },
-    { id: 7, name: 'Confirmation' }
+    { id: 3, name: 'Enter Quantity/Weight' },
+    { id: 4, name: 'Payback Calculation' },
+    { id: 5, name: 'Schedule Pickup' },
+    { id: 6, name: 'Confirmation' }
   ];
 
   const handleInputChange = (e) => {
@@ -80,7 +84,6 @@ const WasteForm = () => {
       return;
     }
 
-    // optimistic: clear previous error
     setFormData(prev => ({ ...prev, locationError: false }));
 
     navigator.geolocation.getCurrentPosition(
@@ -89,7 +92,6 @@ const WasteForm = () => {
         setFormData(prev => ({ ...prev, location: coords, locationAvailable: true, locationError: false }));
       },
       (err) => {
-        // user denied or unavailable - allow manual entry
         console.warn('Geolocation error:', err);
         setFormData(prev => ({ ...prev, location: null, locationAvailable: false, locationError: true }));
       },
@@ -99,11 +101,9 @@ const WasteForm = () => {
 
   const handleMethodSelect = (method) => {
     setFormData(prev => ({ ...prev, submissionMethod: method }));
-    // If Home Pickup selected, attempt to get geolocation. If denied, user can enter address manually.
     if (method === 'Home Pickup') {
       requestGeolocation();
     } else {
-      // clear location when not needed
       setFormData(prev => ({ ...prev, location: null, locationAvailable: false, locationError: false }));
     }
   };
@@ -111,52 +111,39 @@ const WasteForm = () => {
   const handleSubmit = async () => {
     try {
       const formDataToSend = new FormData();
-      
-      // Get user's location
-      const location = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          position => resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          }),
-          () => resolve({ latitude: 0, longitude: 0 })
-        );
-      });
 
-      // Append all form fields
-      formDataToSend.append('userId', 'user123'); // Replace with actual user ID
+      // Use captured location if available
+      const location = formData.locationAvailable ? formData.location : { latitude: 0, longitude: 0 };
+
+      formDataToSend.append('userId', 'user123');
       formDataToSend.append('submissionMethod', formData.submissionMethod);
       formDataToSend.append('status', 'Pending');
-      formDataToSend.append('totalWeightKg', 10); // Calculate from items
-      formDataToSend.append('totalPaybackAmount', 50); // Calculate from items
+      formDataToSend.append('totalWeightKg', formData.weight || 0);
+      formDataToSend.append('totalPaybackAmount', (formData.weight || 0) * 5);
       formDataToSend.append('paymentMethod', 'Bank Transfer');
       formDataToSend.append('paymentStatus', 'Pending');
       
-      // Pickup details
       const pickup = {
         required: formData.submissionMethod === 'Home Pickup',
-        date: formData.pickupDate,
-        timeSlot: formData.pickupTimeSlot,
-        address: formData.address,
-        city: formData.city,
-        zipCode: formData.zipCode
+        date: formData.pickupDate || null,
+        timeSlot: formData.pickupTimeSlot || null,
+        address: formData.address || '',
+        city: formData.city || '',
+        zipCode: formData.zipCode || ''
       };
       formDataToSend.append('pickup', JSON.stringify(pickup));
       
-      // Items
       const items = [{
         category: formData.selectedCategory,
-        itemType: formData.itemDescription,
-        quantity: 1,
-        estimatedWeightKg: 10,
-        estimatedPayback: 50
+        itemType: formData.itemDescription || 'N/A',
+        quantity: formData.quantity || 1,
+        estimatedWeightKg: formData.weight || 0,
+        estimatedPayback: (formData.weight || 0) * 5
       }];
       formDataToSend.append('items', JSON.stringify(items));
       
-      // Location
       formDataToSend.append('location', JSON.stringify(location));
       
-      // Image file
       if (formData.imageFile) {
         formDataToSend.append('imageFile', formData.imageFile);
       }
@@ -168,9 +155,10 @@ const WasteForm = () => {
 
       if (response.ok) {
         alert('Waste submission successful!');
-        setCurrentStep(7);
+        setCurrentStep(6);
       } else {
-        alert('Submission failed. Please try again.');
+        const errorText = await response.text();
+        alert(`Submission failed: ${errorText}`);
       }
     } catch (error) {
       console.error('Error submitting form:', error);
@@ -179,7 +167,7 @@ const WasteForm = () => {
   };
 
   const nextStep = () => {
-    if (currentStep < 7) setCurrentStep(currentStep + 1);
+    if (currentStep < 6) setCurrentStep(currentStep + 1);
   };
 
   const prevStep = () => {
@@ -190,7 +178,6 @@ const WasteForm = () => {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex gap-6">
-          {/* Left Sidebar - Steps */}
           <div className="w-64 bg-white rounded-lg shadow-sm p-4">
             <h2 className="text-xl font-semibold mb-6">Submit Process</h2>
             {steps.map((step) => (
@@ -215,12 +202,10 @@ const WasteForm = () => {
             ))}
           </div>
 
-          {/* Main Content Area */}
           <div className="flex-1 bg-white rounded-lg shadow-sm p-8">
-            {/* Progress Bar */}
             <div className="mb-8">
               <div className="flex justify-between mb-2">
-                {steps.map((step, idx) => (
+                {steps.map((step) => (
                   <div key={step.id} className="flex-1 text-center">
                     <div className={`text-xs font-medium ${currentStep >= step.id ? 'text-green-500' : 'text-gray-400'}`}>
                       {step.name}
@@ -236,7 +221,6 @@ const WasteForm = () => {
               </div>
             </div>
 
-            {/* Step Content */}
             <div className="min-h-96">
               {currentStep === 1 && (
                 <div>
@@ -261,7 +245,7 @@ const WasteForm = () => {
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium mb-2">Full Name</label>
+                      <label className="block text-sm font-medium mb-2">Full Name *</label>
                       <input
                         type="text"
                         name="fullName"
@@ -269,6 +253,7 @@ const WasteForm = () => {
                         onChange={handleInputChange}
                         placeholder="Enter your full name"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
                       />
                     </div>
 
@@ -279,18 +264,21 @@ const WasteForm = () => {
                         value={formData.itemDescription}
                         onChange={handleInputChange}
                         rows="3"
+                        placeholder="Describe your items"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Phone Number</label>
+                      <label className="block text-sm font-medium mb-2">Phone Number *</label>
                       <input
                         type="tel"
                         name="phoneNumber"
                         value={formData.phoneNumber}
                         onChange={handleInputChange}
+                        placeholder="Enter phone number"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
                       />
                     </div>
 
@@ -324,7 +312,7 @@ const WasteForm = () => {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Email Address</label>
+                      <label className="block text-sm font-medium mb-2">Email Address *</label>
                       <input
                         type="email"
                         name="email"
@@ -332,12 +320,9 @@ const WasteForm = () => {
                         onChange={handleInputChange}
                         placeholder="Enter your email"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
                       />
                     </div>
-
-                    
-
-                    
                   </div>
                 </div>
               )}
@@ -388,7 +373,6 @@ const WasteForm = () => {
                     </div>
                   </div>
 
-                  {/* Location Status for Home Pickup */}
                   {formData.submissionMethod === 'Home Pickup' && (
                     <div className="mt-6 max-w-3xl">
                       {formData.locationAvailable && (
@@ -414,7 +398,7 @@ const WasteForm = () => {
                             <div>
                               <p className="font-medium text-yellow-800">Location Access Denied or Unavailable</p>
                               <p className="text-sm text-yellow-700 mt-1">
-                                Please enter your address details manually below or try enabling location services.
+                                You'll need to enter your address manually in the next steps.
                               </p>
                             </div>
                           </div>
@@ -447,17 +431,20 @@ const WasteForm = () => {
                       />
                     </div>
 
-                  
-
                     <div>
-                      <label className="block text-sm font-medium mb-2">Estimated Weight (kg)</label>
+                      <label className="block text-sm font-medium mb-2">Quantity</label>
                       <input
                         type="number"
-                        name="weight"
-                        placeholder="Enter estimated weight"
+                        name="quantity"
+                        value={formData.quantity}
+                        onChange={handleInputChange}
+                        min="1"
+                        placeholder="Enter quantity"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
                     </div>
+
+                    
                   </div>
                 </div>
               )}
@@ -475,7 +462,7 @@ const WasteForm = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="font-medium">Estimated Weight:</span>
-                        <span>10 kg</span>
+                        <span>{formData.weight || 0} kg</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="font-medium">Rate per kg:</span>
@@ -484,7 +471,7 @@ const WasteForm = () => {
                       <hr className="border-green-300" />
                       <div className="flex justify-between text-xl font-bold">
                         <span>Total Payback:</span>
-                        <span className="text-green-600">LKR 50.00</span>
+                        <span className="text-green-600">LKR {((formData.weight || 0) * 5).toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -496,7 +483,6 @@ const WasteForm = () => {
                   <h2 className="text-2xl font-bold mb-2">Schedule Pickup & Address Details</h2>
                   <p className="text-gray-600 mb-8">Select a convenient date and time for pickup</p>
                   
-                  {/* Show location status */}
                   {formData.locationAvailable && (
                     <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
                       <div className="flex items-start gap-3">
@@ -545,58 +531,55 @@ const WasteForm = () => {
                       </select>
                     </div>
 
-                    {/* Manual Address Entry - Always show for Home Pickup */}
-                    <div className="pt-4 border-t">
-                      <h3 className="text-lg font-semibold mb-4">Pickup Address Details</h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {formData.locationAvailable 
-                          ? 'Please provide your complete address for accurate pickup'
-                          : 'Location services unavailable. Please enter your complete address manually'}
-                      </p>
+                    {!formData.locationAvailable && (
+                      <div className="pt-4 border-t">
+                        <h3 className="text-lg font-semibold mb-4">Pickup Address Details</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Location services unavailable. Please enter your complete address manually
+                        </p>
 
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Street Address *</label>
-                          <textarea
-                            name="address"
-                            value={formData.address}
-                            onChange={handleInputChange}
-                            rows="2"
-                            placeholder="House/Apartment number, Street name"
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            required
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-4">
                           <div>
-                            <label className="block text-sm font-medium mb-2">City *</label>
-                            <input
-                              type="text"
-                              name="city"
-                              value={formData.city}
+                            <label className="block text-sm font-medium mb-2">Street Address *</label>
+                            <textarea
+                              name="address"
+                              value={formData.address}
                               onChange={handleInputChange}
-                              placeholder="Enter city"
+                              rows="2"
+                              placeholder="House/Apartment number, Street name"
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                               required
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Zip Code *</label>
-                            <input
-                              type="text"
-                              name="zipCode"
-                              value={formData.zipCode}
-                              onChange={handleInputChange}
-                              placeholder="Enter zip code"
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                              required
-                            />
-                          </div>
-                        </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium mb-2">City *</label>
+                              <input
+                                type="text"
+                                name="city"
+                                value={formData.city}
+                                onChange={handleInputChange}
+                                placeholder="Enter city"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                required
+                              />
+                            </div>
 
-                        {!formData.locationAvailable && (
+                            <div>
+                              <label className="block text-sm font-medium mb-2">Zip Code *</label>
+                              <input
+                                type="text"
+                                name="zipCode"
+                                value={formData.zipCode}
+                                onChange={handleInputChange}
+                                placeholder="Enter zip code"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                                required
+                              />
+                            </div>
+                          </div>
+
                           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                             <div className="flex gap-3">
                               <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -617,9 +600,9 @@ const WasteForm = () => {
                               </div>
                             </div>
                           </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -673,11 +656,21 @@ const WasteForm = () => {
                       <div className="space-y-2 text-sm">
                         <p><span className="font-medium">Method:</span> {formData.submissionMethod}</p>
                         <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
-                        <p><span className="font-medium">Address:</span> {formData.address}</p>
+                        <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
+                        <p><span className="font-medium">Estimated Payback:</span> LKR {((formData.weight || 0) * 5).toFixed(2)}</p>
                         {formData.submissionMethod === 'Home Pickup' && (
                           <>
                             <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>
                             <p><span className="font-medium">Time Slot:</span> {formData.pickupTimeSlot}</p>
+                            {formData.locationAvailable ? (
+                              <p><span className="font-medium">Location:</span> GPS Coordinates Captured</p>
+                            ) : (
+                              <>
+                                <p><span className="font-medium">Address:</span> {formData.address}</p>
+                                <p><span className="font-medium">City:</span> {formData.city}</p>
+                                <p><span className="font-medium">Zip Code:</span> {formData.zipCode}</p>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -712,7 +705,6 @@ const WasteForm = () => {
               )}
             </div>
 
-            {/* Navigation Buttons */}
             {currentStep < 7 && (
               <div className="flex justify-between mt-8 pt-6 border-t">
                 <button
