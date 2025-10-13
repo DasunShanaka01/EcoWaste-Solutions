@@ -14,7 +14,7 @@ const defaultCenter = {
 const Map = ({ markers = [], path = [], liveLocation = null }) => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyAgb9LJDsv4RJLNBUFAotIB8v7acax8sAA" // <-- PASTE YOUR API KEY HERE
+    googleMapsApiKey: "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk" // <-- PASTE YOUR API KEY HERE
   });
 
   // Define the icon inside the component
