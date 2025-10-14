@@ -50,4 +50,11 @@ public class AuthServiceImpl implements AuthService {
         }
         return user;
     }
+
+    @Override
+    public User findUserById(String id) {
+        return userRepository.findById(id).orElse(null);
+    }
+
+    
 }

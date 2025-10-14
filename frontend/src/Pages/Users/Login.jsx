@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../../api/auth";
+import { useUser } from "./UserContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const { setUser } = useUser();
 
   const handleLogin = async () => {
     try {
-      await api.login({ email, password });
-      alert("Login successful");
-      navigate("/"); // redirect to dashboard or home page
+      const data = await api.login({ email, password });
+      // Store the full user object if available; fallback to top-level or minimal object
+      setUser(data?.user || data || { email });
+      navigate("/home", { replace: true });
     } catch (err) {
       alert(err.response?.data || err.message);
     }

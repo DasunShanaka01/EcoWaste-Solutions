@@ -1,15 +1,13 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
+import { useUser } from "../Pages/Users/UserContext";
 
 export default function ProtectedRoute({ children }) {
-  // Example: check if SESSIONID cookie exists
-  const isAuthenticated = document.cookie.includes("SESSIONID");
+  const { user, loading } = useUser();
 
-  if (!isAuthenticated) {
-    // If not logged in, redirect to login
-    return <Navigate to="/users/login" replace />;
-  }
+  if (loading) return <div>Loading...</div>; // wait for session check
 
-  // If logged in, render the children (protected page)
-  return children;
+  if (!user) return <Navigate to="/users/login" replace />; // not logged in
+
+  return children; // logged in, render protected page
 }

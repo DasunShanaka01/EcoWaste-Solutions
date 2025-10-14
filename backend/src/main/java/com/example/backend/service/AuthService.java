@@ -9,4 +9,5 @@ public interface AuthService {
     User registerStep1(RegisterStep1DTO step1DTO);
     User registerStep2(String userId, RegisterStep2DTO step2DTO);
     User login(LoginDTO loginDTO);
+     User findUserById(String id); // ✅ Add this
 }
