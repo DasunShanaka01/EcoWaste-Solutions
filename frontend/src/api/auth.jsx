@@ -82,6 +82,16 @@ const api = {
     });
     return res.data;
   },
+
+  logout: async () => {
+    const res = await axios.post(`${API_URL}/logout`, {}, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
 };
 
 export default api;

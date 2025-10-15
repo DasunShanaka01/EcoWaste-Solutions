@@ -110,4 +110,17 @@ public class AuthController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+    // Logout endpoint
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpServletResponse response) {
+        // Clear the SESSIONID cookie
+        Cookie cookie = new Cookie("SESSIONID", null);
+        cookie.setHttpOnly(true);
+        cookie.setMaxAge(0); // Delete the cookie
+        cookie.setPath("/");
+        response.addCookie(cookie);
+
+        return ResponseEntity.ok().body("Logged out successfully");
+    }
 }
