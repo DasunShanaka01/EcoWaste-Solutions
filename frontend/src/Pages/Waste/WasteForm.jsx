@@ -24,6 +24,10 @@ const WasteForm = () => {
     location: null,
     locationAvailable: false,
     locationError: false,
+    customLocation: null,
+    customLocationSet: false,
+    locationSearchQuery: '',
+    showLocationPicker: false,
     weight: 0
   });
 
@@ -119,7 +123,85 @@ const WasteForm = () => {
     if (method === 'Home Pickup') {
       requestGeolocation();
     } else {
-      setFormData(prev => ({ ...prev, location: null, locationAvailable: false, locationError: false }));
+      setFormData(prev => ({ 
+        ...prev, 
+        location: null, 
+        locationAvailable: false, 
+        locationError: false,
+        customLocation: null,
+        customLocationSet: false,
+        showLocationPicker: false
+      }));
+    }
+  };
+
+  const handleLocationSearch = async () => {
+    if (!formData.locationSearchQuery.trim()) {
+      alert('Please enter a location to search');
+      return;
+    }
+
+    try {
+      // Using Google Places API for location search
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(formData.locationSearchQuery)}&key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk`
+      );
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        const result = data.results[0];
+        const location = {
+          latitude: result.geometry.location.lat,
+          longitude: result.geometry.location.lng,
+          address: result.formatted_address
+        };
+        
+        setFormData(prev => ({
+          ...prev,
+          customLocation: location,
+          customLocationSet: true,
+          showLocationPicker: false
+        }));
+      } else {
+        alert('Location not found. Please try a different search term.');
+      }
+    } catch (error) {
+      console.error('Location search error:', error);
+      alert('Error searching for location. Please try again.');
+    }
+  };
+
+  const handleMapClick = (event) => {
+    const lat = event.latLng.lat();
+    const lng = event.latLng.lng();
+    
+    setFormData(prev => ({
+      ...prev,
+      customLocation: {
+        latitude: lat,
+        longitude: lng,
+        address: `Custom Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`
+      },
+      customLocationSet: true
+    }));
+  };
+
+  const toggleLocationPicker = () => {
+    setFormData(prev => ({ 
+      ...prev, 
+      showLocationPicker: !prev.showLocationPicker 
+    }));
+  };
+
+  const useCustomLocation = () => {
+    if (formData.customLocation) {
+      setFormData(prev => ({
+        ...prev,
+        location: formData.customLocation,
+        locationAvailable: true,
+        locationError: false,
+        showLocationPicker: false
+      }));
     }
   };
 
@@ -514,6 +596,109 @@ const WasteForm = () => {
 
                   {formData.submissionMethod === 'Home Pickup' && (
                     <div className="mt-6 max-w-3xl">
+                      {/* Location Options */}
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-4">Set Pickup Location</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* GPS Location Option */}
+                          <div className="border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-medium mb-2">Use Current Location</h4>
+                            <p className="text-sm text-gray-600 mb-3">Automatically detect your current GPS location</p>
+                            <button
+                              onClick={requestGeolocation}
+                              className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                            >
+                              Get Current Location
+                            </button>
+                          </div>
+
+                          {/* Custom Location Option */}
+                          <div className="border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-medium mb-2">Set Custom Location</h4>
+                            <p className="text-sm text-gray-600 mb-3">Search for or click on map to set location</p>
+                            <button
+                              onClick={toggleLocationPicker}
+                              className="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                            >
+                              Choose Location
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Location Search */}
+                      {formData.showLocationPicker && (
+                        <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-semibold mb-3">Search for Location</h4>
+                          <div className="flex gap-2 mb-4">
+                            <input
+                              type="text"
+                              value={formData.locationSearchQuery}
+                              onChange={(e) => setFormData(prev => ({ ...prev, locationSearchQuery: e.target.value }))}
+                              placeholder="Enter address, landmark, or area..."
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <button
+                              onClick={handleLocationSearch}
+                              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                            >
+                              Search
+                            </button>
+                          </div>
+                          
+                          {/* Interactive Map for Location Selection */}
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <h5 className="font-medium mb-2">Or Click on Map to Set Location</h5>
+                            <div className="relative">
+                              <iframe
+                                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk&q=Colombo,Sri+Lanka&zoom=12&maptype=roadmap`}
+                                width="100%"
+                                height="300"
+                                style={{ border: 0 }}
+                                allowFullScreen=""
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                                className="rounded-lg"
+                                title="Location Picker Map"
+                              />
+                              <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded shadow-sm text-xs text-gray-600">
+                                Click to set location
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Click anywhere on the map to set your pickup location
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Custom Location Preview */}
+                      {formData.customLocationSet && formData.customLocation && (
+                        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <div className="flex-1">
+                              <p className="font-medium text-green-800">Custom Location Set</p>
+                              <p className="text-sm text-green-700 mt-1">
+                                {formData.customLocation.address}
+                              </p>
+                              <p className="text-xs text-green-600 mt-1">
+                                Coordinates: {formData.customLocation.latitude.toFixed(6)}, {formData.customLocation.longitude.toFixed(6)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={useCustomLocation}
+                              className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
+                            >
+                              Use This Location
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* GPS Location Display */}
                       {formData.locationAvailable && (
                         <div className="space-y-4">
                           <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
@@ -554,7 +739,7 @@ const WasteForm = () => {
                               </div>
                             </div>
                             <p className="text-xs text-gray-500 mt-2">
-                              This map shows your current location for pickup scheduling
+                              This map shows your pickup location for scheduling
                             </p>
                           </div>
                         </div>
@@ -569,15 +754,21 @@ const WasteForm = () => {
                             <div>
                               <p className="font-medium text-yellow-800">Location Access Denied or Unavailable</p>
                               <p className="text-sm text-yellow-700 mt-1">
-                                You'll need to enter your address manually in the next steps.
+                                You can use the custom location option above to set your pickup location manually.
                               </p>
                             </div>
                           </div>
                           <button
                             onClick={requestGeolocation}
-                            className="text-sm bg-yellow-100 text-yellow-800 px-4 py-2 rounded hover:bg-yellow-200 transition-colors"
+                            className="text-sm bg-yellow-100 text-yellow-800 px-4 py-2 rounded hover:bg-yellow-200 transition-colors mr-2"
                           >
-                            Try Again
+                            Try GPS Again
+                          </button>
+                          <button
+                            onClick={toggleLocationPicker}
+                            className="text-sm bg-green-100 text-green-800 px-4 py-2 rounded hover:bg-green-200 transition-colors"
+                          >
+                            Set Custom Location
                           </button>
                         </div>
                       )}
