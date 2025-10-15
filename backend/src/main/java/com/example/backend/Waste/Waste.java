@@ -61,9 +61,9 @@ public class Waste {
         private String category;
         private String itemType;
         private String itemDescription;
+        private int quantity;
         private double estimatedWeightKg;
         private double estimatedPayback;
-
     }
 
     // New inner class for storing real coordinates

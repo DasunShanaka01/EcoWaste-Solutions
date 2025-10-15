@@ -9,7 +9,6 @@ import java.util.Optional;
 import org.bson.types.ObjectId;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,24 +18,27 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/waste")
-@CrossOrigin(origins = "*", allowedHeaders = "*") // For testing, allow all origins
-// @CrossOrigin(origins = "http://localhost:3000") // Adjust this to your
-// frontend's URL
 @RequiredArgsConstructor
 public class WasteController {
 
 	private final WasteService wasteService;
 
-	private static final String UPLOAD_DIR = "backend/eco_waste_solutions/uploads/";
+	private static final String UPLOAD_DIR = "uploads/";
 
 	@GetMapping("/wastes")
 	public ResponseEntity<List<Waste>> getAllWastes() {
 		return new ResponseEntity<>(wasteService.findAll(), HttpStatus.OK);
+	}
+
+	@GetMapping("/test")
+	public ResponseEntity<String> testEndpoint() {
+		return new ResponseEntity<>("Waste API is working!", HttpStatus.OK);
 	}
 
 	// Insert waste with image
@@ -48,21 +50,44 @@ public class WasteController {
 			@RequestPart("email") String email,
 			@RequestPart("submissionMethod") String submissionMethod,
 			@RequestPart("status") String status,
-			@RequestPart("pickup") Waste.PickupDetails pickup,
-			@RequestPart("totalWeightKg") double totalWeightKg,
-			@RequestPart("totalPaybackAmount") double totalPaybackAmount,
+			@RequestPart("pickup") String pickupJson,
+			@RequestPart("totalWeightKg") String totalWeightKgStr,
+			@RequestPart("totalPaybackAmount") String totalPaybackAmountStr,
 			@RequestPart("paymentMethod") String paymentMethod,
 			@RequestPart("paymentStatus") String paymentStatus,
-			@RequestPart("items") List<Waste.Item> items,
-			@RequestPart("location") Waste.GeoLocation location,
+			@RequestPart("items") String itemsJson,
+			@RequestPart("location") String locationJson,
 			@RequestPart(value = "imageFile", required = false) MultipartFile imageFile) {
 		try {
+			// Convert string parameters to double
+			double totalWeightKg = Double.parseDouble(totalWeightKgStr);
+			double totalPaybackAmount = Double.parseDouble(totalPaybackAmountStr);
+
+			// Parse JSON strings to objects
+			ObjectMapper objectMapper = new ObjectMapper();
+			Waste.PickupDetails pickup = objectMapper.readValue(pickupJson, Waste.PickupDetails.class);
+			List<Waste.Item> items = objectMapper.readValue(itemsJson,
+					objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
+			Waste.GeoLocation location = objectMapper.readValue(locationJson, Waste.GeoLocation.class);
+
 			String imageUrl = null;
 			if (imageFile != null && !imageFile.isEmpty()) {
-				// Save the file to the server (you might want to add error handling here)
-				String filePath = UPLOAD_DIR + imageFile.getOriginalFilename();
-				imageFile.transferTo(new java.io.File(filePath));
-				imageUrl = filePath; // In a real app, this would be a URL accessible by the frontend
+				try {
+					// Create upload directory if it doesn't exist
+					Path uploadPath = Paths.get(UPLOAD_DIR);
+					Files.createDirectories(uploadPath);
+
+					// Generate unique filename to avoid conflicts
+					String filename = System.currentTimeMillis() + "_" + imageFile.getOriginalFilename();
+					Path filePath = uploadPath.resolve(filename);
+
+					// Save the file
+					Files.write(filePath, imageFile.getBytes());
+					imageUrl = "/uploads/" + filename;
+				} catch (Exception e) {
+					System.err.println("Error saving image file: " + e.getMessage());
+					// Continue without image if file save fails
+				}
 			}
 
 			Waste savedWaste = wasteService.save(userId, fullName, phoneNumber, email, submissionMethod, status, pickup,
@@ -92,15 +117,26 @@ public class WasteController {
 			@RequestPart("email") String email,
 			@RequestPart("submissionMethod") String submissionMethod,
 			@RequestPart("status") String status,
-			@RequestPart("pickup") Waste.PickupDetails pickup,
-			@RequestPart("totalWeightKg") double totalWeightKg,
-			@RequestPart("totalPaybackAmount") double totalPaybackAmount,
+			@RequestPart("pickup") String pickupJson,
+			@RequestPart("totalWeightKg") String totalWeightKgStr,
+			@RequestPart("totalPaybackAmount") String totalPaybackAmountStr,
 			@RequestPart("paymentMethod") String paymentMethod,
 			@RequestPart("paymentStatus") String paymentStatus,
-			@RequestPart("items") List<Waste.Item> items,
-			@RequestPart("location") Waste.GeoLocation location,
+			@RequestPart("items") String itemsJson,
+			@RequestPart("location") String locationJson,
 			@RequestPart(value = "imageFile", required = false) MultipartFile imageFile) {
 		try {
+			// Convert string parameters to double
+			double totalWeightKg = Double.parseDouble(totalWeightKgStr);
+			double totalPaybackAmount = Double.parseDouble(totalPaybackAmountStr);
+
+			// Parse JSON strings to objects
+			ObjectMapper objectMapper = new ObjectMapper();
+			Waste.PickupDetails pickup = objectMapper.readValue(pickupJson, Waste.PickupDetails.class);
+			List<Waste.Item> items = objectMapper.readValue(itemsJson,
+					objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
+			Waste.GeoLocation location = objectMapper.readValue(locationJson, Waste.GeoLocation.class);
+
 			String imageUrl = null;
 			if (imageFile != null && !imageFile.isEmpty()) {
 				String filePath = UPLOAD_DIR + imageFile.getOriginalFilename();
@@ -127,7 +163,7 @@ public class WasteController {
 				wasteToUpdate.setLocation(location);
 
 				// Handle image file if provided
-				if (imageUrl != null && !imageUrl.isEmpty()) {
+				if (imageUrl != null && !imageUrl.isEmpty() && imageFile != null) {
 					String filename = System.currentTimeMillis() + "_" + imageFile.getOriginalFilename();
 					Path filePath = Paths.get(UPLOAD_DIR, filename);
 					Files.createDirectories(filePath.getParent());

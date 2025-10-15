@@ -4,6 +4,7 @@ import { useUser } from '../Users/UserContext';
 const WasteForm = () => {
   const { user, loading } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     phoneNumber: '',
@@ -123,7 +124,46 @@ const WasteForm = () => {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return; // Prevent double submission
+    
+    setIsSubmitting(true);
     try {
+      console.log('Starting form submission...');
+      console.log('Form data:', formData);
+      console.log('User data:', user);
+      
+      // Validate required fields
+      if (!formData.selectedCategory) {
+        alert('Please select a category');
+        setCurrentStep(1);
+        setIsSubmitting(false);
+        return;
+      }
+      if (!formData.submissionMethod) {
+        alert('Please select a submission method');
+        setCurrentStep(2);
+        setIsSubmitting(false);
+        return;
+      }
+      if (!formData.weight || formData.weight <= 0) {
+        alert('Please enter a valid weight');
+        setCurrentStep(3);
+        setIsSubmitting(false);
+        return;
+      }
+      if (formData.submissionMethod === 'Home Pickup' && !formData.pickupDate) {
+        alert('Please select a pickup date');
+        setCurrentStep(5);
+        setIsSubmitting(false);
+        return;
+      }
+      if (formData.submissionMethod === 'Home Pickup' && !formData.pickupTimeSlot) {
+        alert('Please select a pickup time slot');
+        setCurrentStep(5);
+        setIsSubmitting(false);
+        return;
+      }
+      
       const formDataToSend = new FormData();
 
       const location = formData.locationAvailable ? formData.location : { latitude: 0, longitude: 0 };
@@ -134,8 +174,8 @@ const WasteForm = () => {
       formDataToSend.append('email', formData.email);
       formDataToSend.append('submissionMethod', formData.submissionMethod);
       formDataToSend.append('status', 'Pending');
-      formDataToSend.append('totalWeightKg', formData.weight || 0);
-      formDataToSend.append('totalPaybackAmount', (formData.weight || 0) * 5);
+      formDataToSend.append('totalWeightKg', String(formData.weight || 0));
+      formDataToSend.append('totalPaybackAmount', String((formData.weight || 0) * 5));
       formDataToSend.append('paymentMethod', 'Bank Transfer');
       formDataToSend.append('paymentStatus', 'Pending');
       
@@ -164,21 +204,47 @@ const WasteForm = () => {
         formDataToSend.append('imageFile', formData.imageFile);
       }
 
+      // Debug: Log all form data being sent
+      console.log('FormData contents:');
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(key, value);
+      }
+
+      console.log('Sending request to backend...');
       const response = await fetch('http://localhost:8080/api/waste/add', {
         method: 'POST',
-        body: formDataToSend
+        body: formDataToSend,
+        credentials: 'include' // Include cookies for authentication
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
       if (response.ok) {
-        alert('Waste submission successful!');
+        const result = await response.json();
+        console.log('Success response:', result);
+        alert('✅ Waste submission successful! Your recyclables have been submitted for processing.');
         setCurrentStep(6);
       } else {
         const errorText = await response.text();
-        alert(`Submission failed: ${errorText}`);
+        console.error('Error response:', errorText);
+        
+        let errorMessage = 'Submission failed. Please try again.';
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.message || errorMessage;
+        } catch (e) {
+          // If not JSON, use the text as is
+          errorMessage = errorText || errorMessage;
+        }
+        
+        alert(`❌ ${errorMessage}`);
       }
     } catch (error) {
       console.error('Error submitting form:', error);
-      alert('An error occurred. Please try again.');
+      alert(`❌ Network error: ${error.message}. Please check your connection and try again.`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -752,9 +818,21 @@ const WasteForm = () => {
 
                     <button
                       onClick={handleSubmit}
-                      className="w-full bg-green-500 text-white py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors"
+                      disabled={isSubmitting}
+                      className={`w-full py-3 rounded-lg font-semibold transition-colors ${
+                        isSubmitting 
+                          ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                          : 'bg-green-500 text-white hover:bg-green-600'
+                      }`}
                     >
-                      Submit Request
+                      {isSubmitting ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          Submitting...
+                        </div>
+                      ) : (
+                        'Submit Request'
+                      )}
                     </button>
                   </div>
                 </div>
