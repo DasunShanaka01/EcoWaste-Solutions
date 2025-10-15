@@ -515,14 +515,46 @@ const WasteForm = () => {
                   {formData.submissionMethod === 'Home Pickup' && (
                     <div className="mt-6 max-w-3xl">
                       {formData.locationAvailable && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-                          <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <div>
-                            <p className="font-medium text-green-800">Location Captured Successfully</p>
-                            <p className="text-sm text-green-700 mt-1">
-                              Coordinates: {formData.location?.latitude.toFixed(6)}, {formData.location?.longitude.toFixed(6)}
+                        <div className="space-y-4">
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <div>
+                              <p className="font-medium text-green-800">Location Captured Successfully</p>
+                              <p className="text-sm text-green-700 mt-1">
+                                Coordinates: {formData.location?.latitude.toFixed(6)}, {formData.location?.longitude.toFixed(6)}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Map Display */}
+                          <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              Your Location on Map
+                            </h4>
+                            <div className="relative">
+                              <iframe
+                                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk&q=${formData.location?.latitude},${formData.location?.longitude}&zoom=15&maptype=roadmap`}
+                                width="100%"
+                                height="300"
+                                style={{ border: 0 }}
+                                allowFullScreen=""
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                                className="rounded-lg"
+                                title="User Location Map"
+                              />
+                              <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded shadow-sm text-xs text-gray-600">
+                                📍 Your Location
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              This map shows your current location for pickup scheduling
                             </p>
                           </div>
                         </div>
@@ -624,19 +656,51 @@ const WasteForm = () => {
                   <p className="text-gray-600 mb-8">Select a convenient date and time for pickup</p>
                   
                   {formData.locationAvailable && (
-                    <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <div>
-                          <p className="font-medium text-green-800">GPS Location Captured</p>
-                          <p className="text-sm text-green-700 mt-1">
-                            Lat: {formData.location?.latitude.toFixed(6)}, Long: {formData.location?.longitude.toFixed(6)}
-                          </p>
-                          <p className="text-xs text-green-600 mt-1">Your exact location has been saved for pickup</p>
+                    <div className="mb-6 space-y-4">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <div>
+                            <p className="font-medium text-green-800">GPS Location Captured</p>
+                            <p className="text-sm text-green-700 mt-1">
+                              Lat: {formData.location?.latitude.toFixed(6)}, Long: {formData.location?.longitude.toFixed(6)}
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">Your exact location has been saved for pickup</p>
+                          </div>
                         </div>
+                      </div>
+                      
+                      {/* Map Display for Pickup Location */}
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Pickup Location Map
+                        </h4>
+                        <div className="relative">
+                          <iframe
+                            src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk&q=${formData.location?.latitude},${formData.location?.longitude}&zoom=16&maptype=roadmap`}
+                            width="100%"
+                            height="250"
+                            style={{ border: 0 }}
+                            allowFullScreen=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                            className="rounded-lg"
+                            title="Pickup Location Map"
+                          />
+                          <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded shadow-sm text-xs text-gray-600">
+                            🚚 Pickup Location
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          This is where our collection team will come to pick up your recyclables
+                        </p>
                       </div>
                     </div>
                   )}
