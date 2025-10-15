@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useUser } from '../Users/UserContext';
 
 const WasteForm = () => {
+  const { user, loading } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     fullName: '',
@@ -23,6 +25,19 @@ const WasteForm = () => {
     locationError: false,
     weight: 0
   });
+
+  // Populate form with current user data
+  useEffect(() => {
+    if (user && !loading) {
+      console.log('User object:', user); // Debug log
+      setFormData(prev => ({
+        ...prev,
+        fullName: user.name || '',
+        phoneNumber: user.phone || '',
+        email: user.email || ''
+      }));
+    }
+  }, [user, loading]);
 
   const categories = [
     { name: 'E-waste', image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=300' },
@@ -113,7 +128,10 @@ const WasteForm = () => {
 
       const location = formData.locationAvailable ? formData.location : { latitude: 0, longitude: 0 };
 
-      formDataToSend.append('userId', 'user123');
+      formDataToSend.append('userId', user.id || user._id || 'user123');
+      formDataToSend.append('fullName', formData.fullName);
+      formDataToSend.append('phoneNumber', formData.phoneNumber);
+      formDataToSend.append('email', formData.email);
       formDataToSend.append('submissionMethod', formData.submissionMethod);
       formDataToSend.append('status', 'Pending');
       formDataToSend.append('totalWeightKg', formData.weight || 0);
@@ -172,6 +190,30 @@ const WasteForm = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
+  // Show loading state while user data is being fetched
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading user information...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if user is not logged in
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-xl mb-4">⚠️</div>
+          <p className="text-gray-600">Please log in to submit waste</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -201,6 +243,21 @@ const WasteForm = () => {
           </div>
 
           <div className="flex-1 bg-white rounded-lg shadow-sm p-8">
+            {/* User Information Header */}
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-blue-900">Submitting as: {user.name}</h3>
+                  <p className="text-sm text-blue-700">{user.email}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="mb-8">
               <div className="flex justify-between mb-2">
                 {steps.map((step) => (
@@ -244,15 +301,21 @@ const WasteForm = () => {
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium mb-2">Full Name *</label>
-                      <input
-                        type="text"
-                        name="fullName"
-                        value={formData.fullName}
-                        onChange={handleInputChange}
-                        placeholder="Enter your full name"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        required
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="fullName"
+                          value={formData.fullName}
+                          readOnly
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">✓ Pre-filled from your account</p>
                     </div>
 
                     <div>
@@ -269,15 +332,21 @@ const WasteForm = () => {
 
                     <div>
                       <label className="block text-sm font-medium mb-2">Phone Number *</label>
-                      <input
-                        type="tel"
-                        name="phoneNumber"
-                        value={formData.phoneNumber}
-                        onChange={handleInputChange}
-                        placeholder="Enter phone number"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        required
-                      />
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          name="phoneNumber"
+                          value={formData.phoneNumber}
+                          readOnly
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">✓ Pre-filled from your account</p>
                     </div>
 
                     <div>
@@ -311,15 +380,21 @@ const WasteForm = () => {
 
                     <div>
                       <label className="block text-sm font-medium mb-2">Email Address *</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        placeholder="Enter your email"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                        required
-                      />
+                      <div className="relative">
+                        <input
+                          type="email"
+                          name="email"
+                          value={formData.email}
+                          readOnly
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">✓ Pre-filled from your account</p>
                     </div>
                   </div>
                 </div>

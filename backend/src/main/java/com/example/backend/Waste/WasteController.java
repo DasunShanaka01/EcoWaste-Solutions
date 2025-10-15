@@ -25,7 +25,8 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/waste")
 @CrossOrigin(origins = "*", allowedHeaders = "*") // For testing, allow all origins
-//@CrossOrigin(origins = "http://localhost:3000") // Adjust this to your frontend's URL
+// @CrossOrigin(origins = "http://localhost:3000") // Adjust this to your
+// frontend's URL
 @RequiredArgsConstructor
 public class WasteController {
 
@@ -38,21 +39,23 @@ public class WasteController {
 		return new ResponseEntity<>(wasteService.findAll(), HttpStatus.OK);
 	}
 
-	//Insert waste with image
+	// Insert waste with image
 	@PostMapping(value = "/add", consumes = "multipart/form-data")
 	public ResponseEntity<Waste> save(
-		@RequestPart("userId") String userId,
-		@RequestPart("submissionMethod") String submissionMethod,
-		@RequestPart("status") String status,
-		@RequestPart("pickup") Waste.PickupDetails pickup,
-		@RequestPart("totalWeightKg") double totalWeightKg,
-		@RequestPart("totalPaybackAmount") double totalPaybackAmount,
-		@RequestPart("paymentMethod") String paymentMethod,
-		@RequestPart("paymentStatus") String paymentStatus,
-		@RequestPart("items") List<Waste.Item> items,
-		@RequestPart("location") Waste.GeoLocation location,
-		@RequestPart(value = "imageFile",required = false) MultipartFile imageFile
-	) {
+			@RequestPart("userId") String userId,
+			@RequestPart("fullName") String fullName,
+			@RequestPart("phoneNumber") String phoneNumber,
+			@RequestPart("email") String email,
+			@RequestPart("submissionMethod") String submissionMethod,
+			@RequestPart("status") String status,
+			@RequestPart("pickup") Waste.PickupDetails pickup,
+			@RequestPart("totalWeightKg") double totalWeightKg,
+			@RequestPart("totalPaybackAmount") double totalPaybackAmount,
+			@RequestPart("paymentMethod") String paymentMethod,
+			@RequestPart("paymentStatus") String paymentStatus,
+			@RequestPart("items") List<Waste.Item> items,
+			@RequestPart("location") Waste.GeoLocation location,
+			@RequestPart(value = "imageFile", required = false) MultipartFile imageFile) {
 		try {
 			String imageUrl = null;
 			if (imageFile != null && !imageFile.isEmpty()) {
@@ -62,7 +65,7 @@ public class WasteController {
 				imageUrl = filePath; // In a real app, this would be a URL accessible by the frontend
 			}
 
-			Waste savedWaste = wasteService.save(userId, submissionMethod, status, pickup,
+			Waste savedWaste = wasteService.save(userId, fullName, phoneNumber, email, submissionMethod, status, pickup,
 					totalWeightKg, totalPaybackAmount, paymentMethod,
 					paymentStatus, items, imageUrl, location);
 			return new ResponseEntity<>(savedWaste, HttpStatus.CREATED);
@@ -82,19 +85,21 @@ public class WasteController {
 
 	@PutMapping(value = "/{id}", consumes = "multipart/form-data")
 	public ResponseEntity<Waste> updateWaste(
-		@PathVariable ObjectId id,
-		@RequestPart("userId") String userId,
-		@RequestPart("submissionMethod") String submissionMethod,
-		@RequestPart("status") String status,
-		@RequestPart("pickup") Waste.PickupDetails pickup,
-		@RequestPart("totalWeightKg") double totalWeightKg,
-		@RequestPart("totalPaybackAmount") double totalPaybackAmount,
-		@RequestPart("paymentMethod") String paymentMethod,
-		@RequestPart("paymentStatus") String paymentStatus,
-		@RequestPart("items") List<Waste.Item> items,
-		@RequestPart("location") Waste.GeoLocation location,
-		@RequestPart(value = "imageFile", required = false) MultipartFile imageFile
-	) {
+			@PathVariable ObjectId id,
+			@RequestPart("userId") String userId,
+			@RequestPart("fullName") String fullName,
+			@RequestPart("phoneNumber") String phoneNumber,
+			@RequestPart("email") String email,
+			@RequestPart("submissionMethod") String submissionMethod,
+			@RequestPart("status") String status,
+			@RequestPart("pickup") Waste.PickupDetails pickup,
+			@RequestPart("totalWeightKg") double totalWeightKg,
+			@RequestPart("totalPaybackAmount") double totalPaybackAmount,
+			@RequestPart("paymentMethod") String paymentMethod,
+			@RequestPart("paymentStatus") String paymentStatus,
+			@RequestPart("items") List<Waste.Item> items,
+			@RequestPart("location") Waste.GeoLocation location,
+			@RequestPart(value = "imageFile", required = false) MultipartFile imageFile) {
 		try {
 			String imageUrl = null;
 			if (imageFile != null && !imageFile.isEmpty()) {
@@ -108,6 +113,9 @@ public class WasteController {
 				Waste wasteToUpdate = existingWaste.get();
 				// Update fields
 				wasteToUpdate.setUserId(userId);
+				wasteToUpdate.setFullName(fullName);
+				wasteToUpdate.setPhoneNumber(phoneNumber);
+				wasteToUpdate.setEmail(email);
 				wasteToUpdate.setSubmissionMethod(submissionMethod);
 				wasteToUpdate.setStatus(status);
 				wasteToUpdate.setPickup(pickup);
@@ -148,6 +156,5 @@ public class WasteController {
 			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
 		}
 	}
-
 
 }

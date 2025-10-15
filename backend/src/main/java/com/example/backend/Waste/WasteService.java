@@ -25,11 +25,15 @@ public class WasteService {
     }
 
     // add waste
-    public Waste save(String userId, String submissionMethod, String status, Waste.PickupDetails pickup,
+    public Waste save(String userId, String fullName, String phoneNumber, String email, String submissionMethod,
+            String status, Waste.PickupDetails pickup,
             double totalWeightKg, double totalPaybackAmount, String paymentMethod,
             String paymentStatus, List<Waste.Item> items, String imageUrl, Waste.GeoLocation location) {
         Waste waste = new Waste();
         waste.setUserId(userId);
+        waste.setFullName(fullName);
+        waste.setPhoneNumber(phoneNumber);
+        waste.setEmail(email);
         waste.setSubmissionMethod(submissionMethod);
         waste.setStatus(status);
         waste.setPickup(pickup);
@@ -40,6 +44,7 @@ public class WasteService {
         waste.setItems(items);
         waste.setImageUrl(imageUrl);
         waste.setLocation(location);
+        waste.setSubmissionDate(java.time.LocalDateTime.now());
         return wasteRepository.save(waste);
 
     }
