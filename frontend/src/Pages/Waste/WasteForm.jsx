@@ -44,8 +44,8 @@ const WasteForm = () => {
     { name: 'E-waste', image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=300' },
     { name: 'Plastic', image: 'https://images.unsplash.com/photo-1621451537084-482c73073a0f?w=300' },
     { name: 'Glass', image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=300' },
-    { name: 'Aluminum', image: 'https://images.unsplash.com/photo-1564514242-31e7e3bc10a7?w=300' },
-    { name: 'Paper/Cardboard', image: 'https://images.unsplash.com/photo-1594322436404-5a0526db4d13?w=300' }
+    { name: 'Aluminum', image: 'https://images.unsplash.com/photo-1657742239061-64b6de9e0c4a?w=300' },
+    { name: 'Paper/Cardboard', image: 'https://images.unsplash.com/photo-1719600804011-3bff3909b183?w=300' }
   ];
 
   const steps = [
