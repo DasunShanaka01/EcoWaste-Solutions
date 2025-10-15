@@ -6,6 +6,7 @@ import { useUser } from "./UserContext"; // ✅
 export default function RegisterStep1() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const { setUser } = useUser(); // ✅ use context
@@ -17,11 +18,15 @@ export default function RegisterStep1() {
     setError("");
     
     try {
-      const user = await api.registerStep1({ name, phone });
+      const user = await api.registerStep1({ name, phone, email });
       setUser(user); // ✅ save user in context
-      navigate("/users/register/step2");
+      // Send verification code
+      await api.sendVerificationCode(email);
+      navigate("/users/register/verify");
     } catch (err) {
-      setError(err.response?.data || err.message || "Registration failed");
+      console.error("Registration error:", err);
+      const errorMessage = err.response?.data?.message || err.response?.data || err.message || "Registration failed";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -76,6 +81,21 @@ export default function RegisterStep1() {
               />
             </div>
             
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-200 outline-none"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
+            </div>
+            
             <button
               type="submit"
               disabled={isLoading}
@@ -87,7 +107,7 @@ export default function RegisterStep1() {
                   Processing...
                 </div>
               ) : (
-                "Continue to Step 2"
+                "Send Verification Code"
               )}
             </button>
           </form>

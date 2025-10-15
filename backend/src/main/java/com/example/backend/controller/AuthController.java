@@ -3,6 +3,9 @@ package com.example.backend.controller;
 import com.example.backend.dto.RegisterStep1DTO;
 import com.example.backend.dto.RegisterStep2DTO;
 import com.example.backend.dto.LoginDTO;
+import com.example.backend.dto.EmailVerificationDTO;
+import com.example.backend.dto.UpdateProfileDTO;
+import com.example.backend.dto.ChangePasswordDTO;
 import com.example.backend.model.User;
 import com.example.backend.service.AuthService;
 import jakarta.servlet.http.Cookie;
@@ -25,11 +28,37 @@ public class AuthController {
         return authService.registerStep1(step1DTO);
     }
 
-    // STEP 2 Registration
+    // Send verification code
+    @PostMapping("/send-verification")
+    public ResponseEntity<?> sendVerificationCode(@RequestBody EmailVerificationDTO emailDTO) {
+        try {
+            authService.sendVerificationCode(emailDTO.getEmail());
+            return ResponseEntity.ok().body("Verification code sent successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Verify email code
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmailCode(@RequestBody EmailVerificationDTO verificationDTO) {
+        try {
+            boolean isValid = authService.verifyEmailCode(verificationDTO.getEmail(), verificationDTO.getCode());
+            if (isValid) {
+                return ResponseEntity.ok().body("Email verified successfully");
+            } else {
+                return ResponseEntity.badRequest().body("Invalid or expired verification code");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // STEP 2 Registration (Complete registration after email verification)
     @PostMapping("/register/step2/{userId}")
     public User registerStep2(@PathVariable String userId,
-                              @RequestBody RegisterStep2DTO step2DTO) {
-        return authService.registerStep2(userId, step2DTO);
+            @RequestBody RegisterStep2DTO step2DTO) {
+        return authService.completeRegistration(userId, step2DTO);
     }
 
     // ✅ LOGIN (Return full user)
@@ -63,5 +92,22 @@ public class AuthController {
             }
         }
         return ResponseEntity.status(401).body("Not authenticated");
+    }
+
+    // Profile management endpoints
+    @PostMapping("/profile/update/{userId}")
+    public User updateProfile(@PathVariable String userId, @RequestBody UpdateProfileDTO updateProfileDTO) {
+        return authService.updateProfile(userId, updateProfileDTO);
+    }
+
+    @PostMapping("/profile/change-password/{userId}")
+    public ResponseEntity<?> changePassword(@PathVariable String userId,
+            @RequestBody ChangePasswordDTO changePasswordDTO) {
+        try {
+            authService.changePassword(userId, changePasswordDTO);
+            return ResponseEntity.ok().body("Password changed successfully");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

@@ -6,8 +6,10 @@ import Navbar from './components/Navbar.jsx';
 import WasteCollection from './Pages/Collector/WasteCollection.jsx';
 
 import RegisterStep1 from './Pages/Users/RegisterStep1.jsx';
+import EmailVerification from './Pages/Users/EmailVerification.jsx';
 import RegisterStep2 from './Pages/Users/RegisterStep2.jsx';
 import Login from './Pages/Users/Login.jsx';
+import UserProfile from './Pages/Users/UserProfile.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { UserProvider } from './Pages/Users/UserContext.jsx'; // ✅ import context provider
 
@@ -21,6 +23,7 @@ function App() {
         <Route path="/" element={<Navigate to="/users/login" replace />} />
         {/* 🧍 Public (unauthenticated) routes */}
         <Route path="/users/register/step1" element={<RegisterStep1 />} />
+        <Route path="/users/register/verify" element={<EmailVerification />} />
         <Route path="/users/register/step2" element={<RegisterStep2 />} />
         <Route path="/users/login" element={<Login />} />
 
@@ -38,6 +41,14 @@ function App() {
           element={
             <ProtectedRoute>
               <WasteForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <UserProfile />
             </ProtectedRoute>
           }
         />

@@ -9,6 +9,7 @@ const Navbar = () => {
         <Link to="/home" style={{color: 'white', textDecoration: 'none'}}>Home</Link>
         <Link to="/wasteform" style={{color: 'white', textDecoration: 'none'}}>Add Waste</Link>
         <Link to="/wastecollection" style={{color: 'white', textDecoration: 'none'}}>Waste Collection</Link>
+        <Link to="/profile" style={{color: 'white', textDecoration: 'none'}}>Profile</Link>
       </div>
     </nav>
   );

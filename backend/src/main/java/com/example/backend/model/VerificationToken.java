@@ -10,14 +10,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-// @Document(collection = "verification_tokens")
-// @Data
-// @NoArgsConstructor
-// @AllArgsConstructor
-// @Builder
-// public class VerificationToken {
-//     @Id
-//     private String id; // token string
-//     private String email;
-//     private Instant expiresAt;
-// }
+@Document(collection = "verification_tokens")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class VerificationToken {
+    @Id
+    private String id; // token string
+    private String email;
+    private Instant expiresAt;
+}

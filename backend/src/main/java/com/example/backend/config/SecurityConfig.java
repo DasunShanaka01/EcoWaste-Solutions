@@ -15,10 +15,13 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.and())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/waste/**").permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers("OPTIONS", "/**").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form.disable())
                 .httpBasic(httpBasic -> httpBasic.disable());
