@@ -13,6 +13,7 @@ export const UserProvider = ({ children }) => {
         const currentUser = await api.getCurrentUser();
         setUser(currentUser);
       } catch (err) {
+        console.log("No active session:", err.message);
         setUser(null);
       } finally {
         setLoading(false);
