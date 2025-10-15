@@ -3,6 +3,8 @@ import { Route, Routes, Navigate } from 'react-router-dom';
 import Home from './Pages/Home/Home.jsx';
 import WasteForm from './Pages/Waste/WasteForm.jsx';
 import Navbar from './components/Navbar.jsx';
+import WasteCollection from './Pages/Collector/WasteCollection.jsx';
+
 import RegisterStep1 from './Pages/Users/RegisterStep1.jsx';
 import RegisterStep2 from './Pages/Users/RegisterStep2.jsx';
 import Login from './Pages/Users/Login.jsx';
@@ -39,6 +41,9 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/" element={<Home />} />
+        <Route path="/wasteform" element={<WasteForm />} />
+        <Route path="/wastecollection" element={<WasteCollection />} />
       </Routes>
     </UserProvider>
   );
