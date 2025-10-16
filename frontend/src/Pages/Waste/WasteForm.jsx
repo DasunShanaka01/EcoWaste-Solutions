@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '../Users/UserContext';
+import QRCodeDisplay from '../../components/QRCodeDisplay';
 
 const WasteForm = () => {
   const { user, loading } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Helper function to safely render values (convert objects to strings)
+  const safeRender = (value) => {
+    if (value === null || value === undefined) return 'N/A';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
   const [formData, setFormData] = useState({
     fullName: '',
     phoneNumber: '',
@@ -30,6 +38,9 @@ const WasteForm = () => {
     showLocationPicker: false,
     weight: 0
   });
+  
+  // State for storing submitted waste data and QR code
+  const [submittedWaste, setSubmittedWaste] = useState(null);
 
   // Populate form with current user data
   useEffect(() => {
@@ -273,7 +284,7 @@ const WasteForm = () => {
         category: formData.selectedCategory,
         itemType: formData.itemDescription || 'N/A',
         quantity: 1,
-        estimatedWeightKg: formData.weight || 0,
+        estimatedWeightKg: Number(formData.weight) || 0,
         estimatedPayback: calculatePayback(formData.weight, formData.selectedCategory)
       }];
       formDataToSend.append('items', JSON.stringify(items));
@@ -303,6 +314,19 @@ const WasteForm = () => {
       if (response.ok) {
         const result = await response.json();
         console.log('Success response:', result);
+        
+        // Store the submitted waste data for QR code display
+        setSubmittedWaste({
+          id: safeRender(result.id),
+          qrCodeBase64: safeRender(result.qrCodeBase64),
+          userName: safeRender(result.fullName),
+          category: safeRender(result.items?.[0]?.category || formData.selectedCategory),
+          weight: safeRender(result.totalWeightKg),
+          submissionMethod: safeRender(result.submissionMethod),
+          status: safeRender(result.status),
+          paybackAmount: safeRender(result.totalPaybackAmount)
+        });
+        
         alert('✅ Waste submission successful! Your recyclables have been submitted for processing.');
         setCurrentStep(6);
       } else {
@@ -1078,63 +1102,146 @@ const WasteForm = () => {
 
               {currentStep === 6 && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Review & Confirm</h2>
-                  <p className="text-gray-600 mb-8">Please review your submission details</p>
-                  
-                  <div className="max-w-2xl space-y-6">
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="font-semibold mb-4">Personal Information</h3>
-                      <div className="space-y-2 text-sm">
-                        <p><span className="font-medium">Name:</span> {formData.fullName}</p>
-                        <p><span className="font-medium">Email:</span> {formData.email}</p>
-                        <p><span className="font-medium">Phone:</span> {formData.phoneNumber}</p>
+                  {submittedWaste ? (
+                    <div>
+                      <h2 className="text-2xl font-bold mb-2">✅ Submission Successful!</h2>
+                      <p className="text-gray-600 mb-8">Your waste submission has been processed. Here's your QR code for tracking:</p>
+                      
+                      <div className="max-w-4xl space-y-6">
+                        {/* QR Code Display */}
+                        <QRCodeDisplay
+                          qrCodeBase64={submittedWaste.qrCodeBase64}
+                          wasteId={safeRender(submittedWaste.id)}
+                          userName={safeRender(submittedWaste.userName)}
+                          category={safeRender(submittedWaste.category)}
+                          weight={safeRender(submittedWaste.weight)}
+                          submissionMethod={safeRender(submittedWaste.submissionMethod)}
+                          status={safeRender(submittedWaste.status)}
+                          paybackAmount={safeRender(submittedWaste.paybackAmount)}
+                        />
+                        
+                        {/* Submission Summary */}
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                          <h3 className="font-semibold text-green-800 mb-4">Submission Summary</h3>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-green-700">Submission ID:</span>
+                              <span className="ml-2 font-medium">{safeRender(submittedWaste.id)}</span>
+                            </div>
+                            <div>
+                              <span className="text-green-700">Status:</span>
+                              <span className="ml-2 font-medium">{safeRender(submittedWaste.status)}</span>
+                            </div>
+                            <div>
+                              <span className="text-green-700">Method:</span>
+                              <span className="ml-2 font-medium">{safeRender(submittedWaste.submissionMethod)}</span>
+                            </div>
+                            <div>
+                              <span className="text-green-700">Payback Amount:</span>
+                              <span className="ml-2 font-medium text-green-600">LKR {safeRender(submittedWaste.paybackAmount)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="text-center">
+                          <button
+                            onClick={() => {
+                              setCurrentStep(1);
+                              setSubmittedWaste(null);
+                              setFormData({
+                                fullName: user?.name || '',
+                                phoneNumber: user?.phone || '',
+                                email: user?.email || '',
+                                address: '',
+                                city: '',
+                                zipCode: '',
+                                itemDescription: '',
+                                preferredContact: 'Email',
+                                submissionMethod: '',
+                                selectedCategory: '',
+                                items: [],
+                                pickupDate: '',
+                                pickupTimeSlot: '',
+                                imageFile: null,
+                                imagePreview: null,
+                                location: null,
+                                locationAvailable: false,
+                                locationError: false,
+                                customLocation: null,
+                                customLocationSet: false,
+                                locationSearchQuery: '',
+                                showLocationPicker: false,
+                                weight: 0
+                              });
+                            }}
+                            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+                          >
+                            Submit Another Waste
+                          </button>
+                        </div>
                       </div>
                     </div>
+                  ) : (
+                    <div>
+                      <h2 className="text-2xl font-bold mb-2">Review & Confirm</h2>
+                      <p className="text-gray-600 mb-8">Please review your submission details</p>
+                      
+                      <div className="max-w-2xl space-y-6">
+                        <div className="bg-gray-50 rounded-lg p-6">
+                          <h3 className="font-semibold mb-4">Personal Information</h3>
+                          <div className="space-y-2 text-sm">
+                            <p><span className="font-medium">Name:</span> {formData.fullName}</p>
+                            <p><span className="font-medium">Email:</span> {formData.email}</p>
+                            <p><span className="font-medium">Phone:</span> {formData.phoneNumber}</p>
+                          </div>
+                        </div>
 
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="font-semibold mb-4">Submission Details</h3>
-                      <div className="space-y-2 text-sm">
-                        <p><span className="font-medium">Method:</span> {formData.submissionMethod}</p>
-                        <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
-                        <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
-                        <p><span className="font-medium">Estimated Payback:</span> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</p>
-                        {formData.submissionMethod === 'Home Pickup' && (
-                          <>
-                            <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>
-                            <p><span className="font-medium">Time Slot:</span> {formData.pickupTimeSlot}</p>
-                            {formData.locationAvailable ? (
-                              <p><span className="font-medium">Location:</span> GPS Coordinates Captured</p>
-                            ) : (
+                        <div className="bg-gray-50 rounded-lg p-6">
+                          <h3 className="font-semibold mb-4">Submission Details</h3>
+                          <div className="space-y-2 text-sm">
+                            <p><span className="font-medium">Method:</span> {formData.submissionMethod}</p>
+                            <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
+                            <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
+                            <p><span className="font-medium">Estimated Payback:</span> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</p>
+                            {formData.submissionMethod === 'Home Pickup' && (
                               <>
-                                <p><span className="font-medium">Address:</span> {formData.address}</p>
-                                <p><span className="font-medium">City:</span> {formData.city}</p>
-                                <p><span className="font-medium">Zip Code:</span> {formData.zipCode}</p>
+                                <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>
+                                <p><span className="font-medium">Time Slot:</span> {formData.pickupTimeSlot}</p>
+                                {formData.locationAvailable ? (
+                                  <p><span className="font-medium">Location:</span> GPS Coordinates Captured</p>
+                                ) : (
+                                  <>
+                                    <p><span className="font-medium">Address:</span> {formData.address}</p>
+                                    <p><span className="font-medium">City:</span> {formData.city}</p>
+                                    <p><span className="font-medium">Zip Code:</span> {formData.zipCode}</p>
+                                  </>
+                                )}
                               </>
                             )}
-                          </>
-                        )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleSubmit}
+                          disabled={isSubmitting}
+                          className={`w-full py-3 rounded-lg font-semibold transition-colors ${
+                            isSubmitting 
+                              ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                              : 'bg-green-500 text-white hover:bg-green-600'
+                          }`}
+                        >
+                          {isSubmitting ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                              Submitting...
+                            </div>
+                          ) : (
+                            'Submit Request'
+                          )}
+                        </button>
                       </div>
                     </div>
-
-                    <button
-                      onClick={handleSubmit}
-                      disabled={isSubmitting}
-                      className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                        isSubmitting 
-                          ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
-                          : 'bg-green-500 text-white hover:bg-green-600'
-                      }`}
-                    >
-                      {isSubmitting ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          Submitting...
-                        </div>
-                      ) : (
-                        'Submit Request'
-                      )}
-                    </button>
-                  </div>
+                  )}
                 </div>
               )}
             </div>

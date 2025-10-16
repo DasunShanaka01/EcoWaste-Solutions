@@ -4,7 +4,10 @@ import java.util.List;
 import java.util.Optional;
 
 import org.bson.types.ObjectId;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import com.example.backend.service.QRCodeService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -14,6 +17,9 @@ public class WasteService {
 
     // This is the repository that interacts with MongoDB
     private final WasteRepository wasteRepository;
+
+    @Autowired
+    private QRCodeService qrCodeService;
 
     public List<Waste> findAll() {
         return wasteRepository.findAll();
@@ -45,8 +51,29 @@ public class WasteService {
         waste.setImageUrl(imageUrl);
         waste.setLocation(location);
         waste.setSubmissionDate(java.time.LocalDateTime.now());
-        return wasteRepository.save(waste);
 
+        // Save first to get the ID, then generate QR code
+        Waste savedWaste = wasteRepository.save(waste);
+
+        // Generate QR code with waste details
+        try {
+            String qrData = qrCodeService.generateDetailedWasteQRData(
+                    savedWaste.getId().toString(),
+                    fullName,
+                    items.isEmpty() ? "Mixed" : items.get(0).getCategory(),
+                    totalWeightKg,
+                    submissionMethod,
+                    status,
+                    totalPaybackAmount,
+                    phoneNumber);
+            String qrCodeBase64 = qrCodeService.generateQRCodeBase64(qrData);
+            savedWaste.setQrCodeBase64(qrCodeBase64);
+            return wasteRepository.save(savedWaste);
+        } catch (Exception e) {
+            System.err.println("Error generating QR code: " + e.getMessage());
+            // Return waste without QR code if generation fails
+            return savedWaste;
+        }
     }
 
     public void deleteById(ObjectId id) {
