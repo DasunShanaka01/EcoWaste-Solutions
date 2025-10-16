@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .test-case { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>Login System Test</h1>
+    
+    <div class="test-case">
+        <h3>Test Admin Login</h3>
+        <p>Email: admin@gmail.com | Password: admin123</p>
+        <p>Expected: Redirect to Admin Dashboard</p>
+        <button onclick="testAdminLogin()">Test Admin Login</button>
+        <div id="admin-result"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test Collector Login (Kamal)</h3>
+        <p>Email: kamal@gmail.com | Password: kamal123</p>
+        <p>Expected: Redirect to Collector Dashboard</p>
+        <button onclick="testKamalLogin()">Test Kamal Login</button>
+        <div id="kamal-result"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test Collector Login (Sunil)</h3>
+        <p>Email: sunil@gmail.com | Password: sunil123</p>
+        <p>Expected: Redirect to Collector Dashboard</p>
+        <button onclick="testSunilLogin()">Test Sunil Login</button>
+        <div id="sunil-result"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test Regular User Login</h3>
+        <p>Email: user@example.com | Password: password123</p>
+        <p>Expected: Redirect to Home</p>
+        <button onclick="testUserLogin()">Test User Login</button>
+        <div id="user-result"></div>
+    </div>
+
+    <script>
+        async function testLogin(email, password, expectedRole) {
+            try {
+                const response = await fetch('http://localhost:8080/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const user = await response.json();
+                    return {
+                        success: true,
+                        user: user,
+                        role: user.role,
+                        expectedRole: expectedRole
+                    };
+                } else {
+                    const error = await response.text();
+                    return {
+                        success: false,
+                        error: error
+                    };
+                }
+            } catch (error) {
+                return {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+
+        function displayResult(elementId, result) {
+            const element = document.getElementById(elementId);
+            if (result.success) {
+                const roleMatch = result.role === result.expectedRole;
+                element.innerHTML = `
+                    <div class="${roleMatch ? 'success' : 'error'}">
+                        <strong>${roleMatch ? 'SUCCESS' : 'FAILED'}</strong><br>
+                        Role: ${result.role} (Expected: ${result.expectedRole})<br>
+                        User: ${result.user.name} (${result.user.email})
+                    </div>
+                `;
+            } else {
+                element.innerHTML = `
+                    <div class="error">
+                        <strong>ERROR</strong><br>
+                        ${result.error}
+                    </div>
+                `;
+            }
+        }
+
+        async function testAdminLogin() {
+            const result = await testLogin('admin@gmail.com', 'admin123', 'ADMIN');
+            displayResult('admin-result', result);
+        }
+
+        async function testKamalLogin() {
+            const result = await testLogin('kamal@gmail.com', 'kamal123', 'COLLECTOR');
+            displayResult('kamal-result', result);
+        }
+
+        async function testSunilLogin() {
+            const result = await testLogin('sunil@gmail.com', 'sunil123', 'COLLECTOR');
+            displayResult('sunil-result', result);
+        }
+
+        async function testUserLogin() {
+            const result = await testLogin('user@example.com', 'password123', 'USER');
+            displayResult('user-result', result);
+        }
+    </script>
+</body>
+</html>

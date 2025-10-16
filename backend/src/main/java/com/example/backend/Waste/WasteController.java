@@ -3,7 +3,9 @@ package com.example.backend.Waste;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.bson.types.ObjectId;
@@ -14,11 +16,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,6 +32,9 @@ import lombok.RequiredArgsConstructor;
 public class WasteController {
 
 	private final WasteService wasteService;
+
+	@Autowired
+	private ObjectMapper objectMapper;
 
 	private static final String UPLOAD_DIR = "uploads/";
 
@@ -43,7 +50,7 @@ public class WasteController {
 
 	// Insert waste with image
 	@PostMapping(value = "/add", consumes = "multipart/form-data")
-	public ResponseEntity<Waste> save(
+	public ResponseEntity<?> save(
 			@RequestPart("userId") String userId,
 			@RequestPart("fullName") String fullName,
 			@RequestPart("phoneNumber") String phoneNumber,
@@ -64,6 +71,7 @@ public class WasteController {
 			double totalPaybackAmount = Double.parseDouble(totalPaybackAmountStr);
 
 			// Parse JSON strings to objects
+			// Using injected ObjectMapper with JSR310 configuration
 			ObjectMapper objectMapper = new ObjectMapper();
 			Waste.PickupDetails pickup = objectMapper.readValue(pickupJson, Waste.PickupDetails.class);
 			List<Waste.Item> items = objectMapper.readValue(itemsJson,
@@ -95,8 +103,9 @@ public class WasteController {
 					paymentStatus, items, imageUrl, location);
 			return new ResponseEntity<>(savedWaste, HttpStatus.CREATED);
 		} catch (Exception e) {
+			System.err.println("Error in waste submission: " + e.getMessage());
 			e.printStackTrace();
-			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+			return new ResponseEntity<String>("Error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -131,6 +140,7 @@ public class WasteController {
 			double totalPaybackAmount = Double.parseDouble(totalPaybackAmountStr);
 
 			// Parse JSON strings to objects
+			// Using injected ObjectMapper with JSR310 configuration
 			ObjectMapper objectMapper = new ObjectMapper();
 			Waste.PickupDetails pickup = objectMapper.readValue(pickupJson, Waste.PickupDetails.class);
 			List<Waste.Item> items = objectMapper.readValue(itemsJson,
@@ -190,6 +200,173 @@ public class WasteController {
 			return new ResponseEntity<>(HttpStatus.NO_CONTENT);
 		} else {
 			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+		}
+	}
+
+	// Get waste submissions by userId
+	@GetMapping("/user/{userId}")
+	public ResponseEntity<List<Waste>> getWastesByUserId(@PathVariable String userId) {
+		List<Waste> wastes = wasteService.findByUserIdOrderBySubmissionDateDesc(userId);
+		return new ResponseEntity<>(wastes, HttpStatus.OK);
+	}
+
+	// Update waste submission (JSON-based for basic updates)
+	@PutMapping("/{id}/update")
+	public ResponseEntity<Waste> updateWasteBasic(
+			@PathVariable ObjectId id,
+			@RequestBody Map<String, Object> updates) {
+		try {
+			Optional<Waste> existingWaste = wasteService.findById(id);
+			if (existingWaste.isPresent()) {
+				Waste wasteToUpdate = existingWaste.get();
+
+				// Only allow updates to specific fields
+				if (updates.containsKey("submissionMethod")) {
+					wasteToUpdate.setSubmissionMethod((String) updates.get("submissionMethod"));
+				}
+				if (updates.containsKey("totalWeightKg")) {
+					wasteToUpdate.setTotalWeightKg(((Number) updates.get("totalWeightKg")).doubleValue());
+				}
+				if (updates.containsKey("totalPaybackAmount")) {
+					wasteToUpdate.setTotalPaybackAmount(((Number) updates.get("totalPaybackAmount")).doubleValue());
+				}
+				if (updates.containsKey("pickup")) {
+					// Parse pickup details from JSON
+					// Using injected ObjectMapper with JSR310 configuration
+					Waste.PickupDetails pickup = objectMapper.convertValue(updates.get("pickup"),
+							Waste.PickupDetails.class);
+					wasteToUpdate.setPickup(pickup);
+				}
+				if (updates.containsKey("items")) {
+					// Parse items from JSON
+					// Using injected ObjectMapper with JSR310 configuration
+					List<Waste.Item> items = objectMapper.convertValue(updates.get("items"),
+							objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
+					wasteToUpdate.setItems(items);
+				}
+
+				Waste updatedWaste = wasteService.update(wasteToUpdate);
+				return new ResponseEntity<>(updatedWaste, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Get QR code for a specific waste submission
+	@GetMapping("/{id}/qr-code")
+	public ResponseEntity<Map<String, String>> getQRCode(@PathVariable ObjectId id) {
+		try {
+			Optional<Waste> waste = wasteService.findById(id);
+			if (waste.isPresent()) {
+				Map<String, String> response = new HashMap<>();
+				response.put("qrCodeBase64", waste.get().getQrCodeBase64());
+				response.put("wasteId", waste.get().getId().toString());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Scan QR code and get waste details
+	@PostMapping("/scan-qr")
+	public ResponseEntity<Map<String, Object>> scanQRCode(@RequestBody Map<String, String> request) {
+		try {
+			String qrData = request.get("qrData");
+			if (qrData == null || qrData.trim().isEmpty()) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "QR data is required");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			// Parse QR data to extract waste ID
+			String wasteId = null;
+			String[] lines = qrData.split("\n");
+			for (String line : lines) {
+				if (line.startsWith("ID: ")) {
+					wasteId = line.substring(4).trim();
+					break;
+				}
+			}
+
+			if (wasteId == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Invalid QR code format");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			// Find waste by ID
+			Optional<Waste> waste = wasteService.findById(new ObjectId(wasteId));
+			if (waste.isPresent()) {
+				Map<String, Object> response = new HashMap<>();
+				Waste wasteData = waste.get();
+				response.put("wasteId", wasteData.getId().toString());
+				response.put("userName", wasteData.getFullName());
+				response.put("phoneNumber", wasteData.getPhoneNumber());
+				response.put("email", wasteData.getEmail());
+				response.put("category",
+						wasteData.getItems().isEmpty() ? "Mixed" : wasteData.getItems().get(0).getCategory());
+				response.put("weight", wasteData.getTotalWeightKg());
+				response.put("submissionMethod", wasteData.getSubmissionMethod());
+				response.put("status", wasteData.getStatus());
+				response.put("paybackAmount", wasteData.getTotalPaybackAmount());
+				response.put("submissionDate",
+						wasteData.getSubmissionDate() != null ? wasteData.getSubmissionDate().toString() : null);
+				response.put("items", wasteData.getItems());
+				response.put("pickup", wasteData.getPickup());
+				response.put("location", wasteData.getLocation());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste submission not found");
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error scanning QR code: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Get waste details by ID (for QR code scanning)
+	@GetMapping("/{id}/details")
+	public ResponseEntity<Map<String, Object>> getWasteDetails(@PathVariable ObjectId id) {
+		try {
+			Optional<Waste> waste = wasteService.findById(id);
+			if (waste.isPresent()) {
+				Map<String, Object> response = new HashMap<>();
+				Waste wasteData = waste.get();
+				response.put("wasteId", wasteData.getId().toString());
+				response.put("userName", wasteData.getFullName());
+				response.put("phoneNumber", wasteData.getPhoneNumber());
+				response.put("email", wasteData.getEmail());
+				response.put("category",
+						wasteData.getItems().isEmpty() ? "Mixed" : wasteData.getItems().get(0).getCategory());
+				response.put("weight", wasteData.getTotalWeightKg());
+				response.put("submissionMethod", wasteData.getSubmissionMethod());
+				response.put("status", wasteData.getStatus());
+				response.put("paybackAmount", wasteData.getTotalPaybackAmount());
+				response.put("submissionDate",
+						wasteData.getSubmissionDate() != null ? wasteData.getSubmissionDate().toString() : null);
+				response.put("items", wasteData.getItems());
+				response.put("pickup", wasteData.getPickup());
+				response.put("location", wasteData.getLocation());
+				response.put("qrCodeBase64", wasteData.getQrCodeBase64());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

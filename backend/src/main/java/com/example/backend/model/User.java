@@ -13,6 +13,7 @@ public class User {
     private String email;
     private String password;
     private boolean emailVerified;
+    private String role; // ADMIN, COLLECTOR, USER
     private Instant createdAt;
 
     private boolean active = true;
@@ -69,6 +70,14 @@ public class User {
 
     public void setEmailVerified(boolean emailVerified) {
         this.emailVerified = emailVerified;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public Instant getCreatedAt() {

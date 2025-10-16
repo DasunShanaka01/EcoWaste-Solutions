@@ -92,6 +92,37 @@ const api = {
     });
     return res.data;
   },
+
+  // Waste management
+  getUserWasteSubmissions: async (userId) => {
+    const res = await axios.get(`http://localhost:8080/api/waste/user/${userId}`, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
+
+  deleteWasteSubmission: async (wasteId) => {
+    const res = await axios.delete(`http://localhost:8080/api/waste/${wasteId}`, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
+
+  updateWasteSubmission: async (wasteId, updates) => {
+    const res = await axios.put(`http://localhost:8080/api/waste/${wasteId}/update`, updates, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
 };
 
 export default api;
