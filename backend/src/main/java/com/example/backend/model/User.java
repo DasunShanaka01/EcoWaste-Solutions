@@ -15,6 +15,9 @@ public class User {
     private boolean emailVerified;
     private Instant createdAt;
 
+    private boolean active = true;
+    private boolean hasOverduePayments = false;
+
     // Default constructor
     public User() {
     }
@@ -74,5 +77,21 @@ public class User {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public boolean isHasOverduePayments() {
+        return hasOverduePayments;
+    }
+
+    public void setHasOverduePayments(boolean hasOverduePayments) {
+        this.hasOverduePayments = hasOverduePayments;
     }
 }
