@@ -20,7 +20,16 @@ export default function Login() {
       const data = await api.login({ email, password });
       // Store the full user object if available; fallback to top-level or minimal object
       setUser(data?.user || data || { email });
-      navigate("/home", { replace: true });
+      
+      // Role-based redirection
+      const userRole = (data?.user || data)?.role;
+      if (userRole === "ADMIN") {
+        navigate("/admin/dashboard", { replace: true });
+      } else if (userRole === "COLLECTOR") {
+        navigate("/collector/dashboard", { replace: true });
+      } else {
+        navigate("/home", { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data || err.message || "Login failed");
     } finally {

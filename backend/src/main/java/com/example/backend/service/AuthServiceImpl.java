@@ -10,7 +10,6 @@ import com.example.backend.model.User;
 import com.example.backend.model.VerificationToken;
 import com.example.backend.repository.UserRepository;
 import com.example.backend.repository.VerificationTokenRepository;
-import com.example.backend.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -57,11 +56,37 @@ public class AuthServiceImpl implements AuthService {
         }
 
         user.setPassword(passwordEncoder.encode(step2DTO.getPassword()));
+        user.setRole("USER"); // Default role for regular users
         return userRepository.save(user);
     }
 
     @Override
     public User login(LoginDTO loginDTO) {
+        // Handle special admin and collector credentials
+        if ("admin@gmail.com".equals(loginDTO.getEmail()) && "admin123".equals(loginDTO.getPassword())) {
+            User adminUser = new User();
+            adminUser.setId("admin-001");
+            adminUser.setName("Admin");
+            adminUser.setEmail("admin@gmail.com");
+            adminUser.setRole("ADMIN");
+            adminUser.setEmailVerified(true);
+            adminUser.setCreatedAt(Instant.now());
+            return adminUser;
+        }
+
+        if (("kamal@gmail.com".equals(loginDTO.getEmail()) && "kamal123".equals(loginDTO.getPassword())) ||
+                ("sunil@gmail.com".equals(loginDTO.getEmail()) && "sunil123".equals(loginDTO.getPassword()))) {
+            User collectorUser = new User();
+            collectorUser.setId("collector-" + (loginDTO.getEmail().equals("kamal@gmail.com") ? "001" : "002"));
+            collectorUser.setName(loginDTO.getEmail().equals("kamal@gmail.com") ? "Kamal" : "Sunil");
+            collectorUser.setEmail(loginDTO.getEmail());
+            collectorUser.setRole("COLLECTOR");
+            collectorUser.setEmailVerified(true);
+            collectorUser.setCreatedAt(Instant.now());
+            return collectorUser;
+        }
+
+        // Regular user login
         User user = userRepository.findByEmail(loginDTO.getEmail())
                 .orElseThrow(() -> new CustomException("Invalid email or password"));
         if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
@@ -132,6 +157,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         user.setPassword(passwordEncoder.encode(step2DTO.getPassword()));
+        user.setRole("USER"); // Default role for regular users
         return userRepository.save(user);
     }
 
