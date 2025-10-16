@@ -57,4 +57,14 @@ public class WasteService {
         return wasteRepository.save(waste);
     }
 
+    // Find all waste submissions by userId
+    public List<Waste> findByUserId(String userId) {
+        return wasteRepository.findByUserId(userId);
+    }
+
+    // Find waste submissions by userId ordered by submission date (newest first)
+    public List<Waste> findByUserIdOrderBySubmissionDateDesc(String userId) {
+        return wasteRepository.findByUserIdOrderBySubmissionDateDesc(userId);
+    }
+
 }

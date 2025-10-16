@@ -1,10 +1,22 @@
 package com.example.backend.dto;
 
-public class RegisterStep1DTO {
+public class UpdateProfileDTO {
     private String name;
     private String phone;
     private String email;
 
+    // Default constructor
+    public UpdateProfileDTO() {
+    }
+
+    // Constructor with parameters
+    public UpdateProfileDTO(String name, String phone, String email) {
+        this.name = name;
+        this.phone = phone;
+        this.email = email;
+    }
+
+    // Getters and setters
     public String getName() {
         return name;
     }

@@ -4,7 +4,6 @@ import api from "../../api/auth";
 import { useUser } from "./UserContext"; // ✅
 
 export default function RegisterStep2() {
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +22,11 @@ export default function RegisterStep2() {
         return;
       }
 
+      if (!user?.emailVerified) {
+        setError("Email not verified! Please complete email verification first.");
+        return;
+      }
+
       if (password !== confirmPassword) {
         setError("Passwords do not match!");
         return;
@@ -33,10 +37,12 @@ export default function RegisterStep2() {
         return;
       }
 
-      await api.registerStep2(user.id, { email, password });
+      await api.registerStep2(user.id, { email: user.email, password });
       navigate("/users/login");
     } catch (err) {
-      setError(err.response?.data || err.message || "Registration failed");
+      console.error("Registration error:", err);
+      const errorMessage = err.response?.data?.message || err.response?.data || err.message || "Registration failed";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +57,8 @@ export default function RegisterStep2() {
               <span className="text-purple-600 text-xl font-bold">2</span>
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Almost There!</h2>
-            <p className="text-gray-600 mb-8">Step 2: Create your login credentials</p>
+            <p className="text-gray-600 mb-2">Step 2: Create your login credentials</p>
+            <p className="text-sm text-green-600 mb-8">✓ Email verified: {user?.email}</p>
           </div>
           
           <form onSubmit={handleRegister} className="space-y-6">
@@ -60,21 +67,6 @@ export default function RegisterStep2() {
                 {error}
               </div>
             )}
-            
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
-                placeholder="Enter your email address"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-              />
-            </div>
             
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
@@ -122,7 +114,7 @@ export default function RegisterStep2() {
             </button>
           </form>
           
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-4">
             <p className="text-gray-600">
               Already have an account?{" "}
               <button
@@ -132,6 +124,15 @@ export default function RegisterStep2() {
                 Sign in here
               </button>
             </p>
+            
+            <div className="pt-4 border-t border-gray-200">
+              <button
+                onClick={() => navigate("/users/register/verify")}
+                className="text-sm text-gray-500 hover:text-gray-700 transition duration-200"
+              >
+                ← Back to Email Verification
+              </button>
+            </div>
           </div>
         </div>
       </div>

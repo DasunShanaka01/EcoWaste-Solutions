@@ -24,6 +24,10 @@ const WasteForm = () => {
     location: null,
     locationAvailable: false,
     locationError: false,
+    customLocation: null,
+    customLocationSet: false,
+    locationSearchQuery: '',
+    showLocationPicker: false,
     weight: 0
   });
 
@@ -41,12 +45,24 @@ const WasteForm = () => {
   }, [user, loading]);
 
   const categories = [
-    { name: 'E-waste', image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=300' },
-    { name: 'Plastic', image: 'https://images.unsplash.com/photo-1621451537084-482c73073a0f?w=300' },
-    { name: 'Glass', image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=300' },
-    { name: 'Aluminum', image: 'https://images.unsplash.com/photo-1564514242-31e7e3bc10a7?w=300' },
-    { name: 'Paper/Cardboard', image: 'https://images.unsplash.com/photo-1594322436404-5a0526db4d13?w=300' }
+    { name: 'E-waste', image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=300', ratePerKg: 15.00 },
+    { name: 'Plastic', image: 'https://images.unsplash.com/photo-1621451537084-482c73073a0f?w=300', ratePerKg: 8.00 },
+    { name: 'Glass', image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=300', ratePerKg: 6.00 },
+    { name: 'Aluminum', image: 'https://images.unsplash.com/photo-1657742239061-64b6de9e0c4a?w=300', ratePerKg: 12.00 },
+    { name: 'Paper/Cardboard', image: 'https://images.unsplash.com/photo-1719600804011-3bff3909b183?w=300', ratePerKg: 4.00 }
   ];
+
+  // Function to get rate per kg for selected category
+  const getRatePerKg = (categoryName) => {
+    const category = categories.find(cat => cat.name === categoryName);
+    return category ? category.ratePerKg : 5.00; // Default rate if category not found
+  };
+
+  // Function to calculate payback amount
+  const calculatePayback = (weight, categoryName) => {
+    const rate = getRatePerKg(categoryName);
+    return (weight || 0) * rate;
+  };
 
   const steps = [
     { id: 1, name: 'Submit Recyclables' },
@@ -119,7 +135,71 @@ const WasteForm = () => {
     if (method === 'Home Pickup') {
       requestGeolocation();
     } else {
-      setFormData(prev => ({ ...prev, location: null, locationAvailable: false, locationError: false }));
+      setFormData(prev => ({ 
+        ...prev, 
+        location: null, 
+        locationAvailable: false, 
+        locationError: false,
+        customLocation: null,
+        customLocationSet: false,
+        showLocationPicker: false
+      }));
+    }
+  };
+
+  const handleLocationSearch = async () => {
+    if (!formData.locationSearchQuery.trim()) {
+      alert('Please enter a location to search');
+      return;
+    }
+
+    try {
+      // Using Google Places API for location search
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(formData.locationSearchQuery)}&key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk`
+      );
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        const result = data.results[0];
+        const location = {
+          latitude: result.geometry.location.lat,
+          longitude: result.geometry.location.lng,
+          address: result.formatted_address
+        };
+        
+        setFormData(prev => ({
+          ...prev,
+          customLocation: location,
+          customLocationSet: true,
+          showLocationPicker: false
+        }));
+      } else {
+        alert('Location not found. Please try a different search term.');
+      }
+    } catch (error) {
+      console.error('Location search error:', error);
+      alert('Error searching for location. Please try again.');
+    }
+  };
+
+
+  const toggleLocationPicker = () => {
+    setFormData(prev => ({ 
+      ...prev, 
+      showLocationPicker: !prev.showLocationPicker 
+    }));
+  };
+
+  const useCustomLocation = () => {
+    if (formData.customLocation) {
+      setFormData(prev => ({
+        ...prev,
+        location: formData.customLocation,
+        locationAvailable: true,
+        locationError: false,
+        showLocationPicker: false
+      }));
     }
   };
 
@@ -175,7 +255,7 @@ const WasteForm = () => {
       formDataToSend.append('submissionMethod', formData.submissionMethod);
       formDataToSend.append('status', 'Pending');
       formDataToSend.append('totalWeightKg', String(formData.weight || 0));
-      formDataToSend.append('totalPaybackAmount', String((formData.weight || 0) * 5));
+      formDataToSend.append('totalPaybackAmount', String(calculatePayback(formData.weight, formData.selectedCategory)));
       formDataToSend.append('paymentMethod', 'Bank Transfer');
       formDataToSend.append('paymentStatus', 'Pending');
       
@@ -194,7 +274,7 @@ const WasteForm = () => {
         itemType: formData.itemDescription || 'N/A',
         quantity: 1,
         estimatedWeightKg: formData.weight || 0,
-        estimatedPayback: (formData.weight || 0) * 5
+        estimatedPayback: calculatePayback(formData.weight, formData.selectedCategory)
       }];
       formDataToSend.append('items', JSON.stringify(items));
       
@@ -360,6 +440,9 @@ const WasteForm = () => {
                       >
                         <img src={cat.image} alt={cat.name} className="w-full h-32 object-cover rounded mb-2" />
                         <p className="text-center text-sm font-medium">{cat.name}</p>
+                        <p className="text-center text-xs text-green-600 font-semibold mt-1">
+                          LKR {cat.ratePerKg}/kg
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -514,15 +597,150 @@ const WasteForm = () => {
 
                   {formData.submissionMethod === 'Home Pickup' && (
                     <div className="mt-6 max-w-3xl">
+                      {/* Location Options */}
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-4">Set Pickup Location</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* GPS Location Option */}
+                          <div className="border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-medium mb-2">Use Current Location</h4>
+                            <p className="text-sm text-gray-600 mb-3">Automatically detect your current GPS location</p>
+                            <button
+                              onClick={requestGeolocation}
+                              className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                            >
+                              Get Current Location
+                            </button>
+                          </div>
+
+                          {/* Custom Location Option */}
+                          <div className="border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-medium mb-2">Set Custom Location</h4>
+                            <p className="text-sm text-gray-600 mb-3">Search for or click on map to set location</p>
+                            <button
+                              onClick={toggleLocationPicker}
+                              className="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                            >
+                              Choose Location
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Location Search */}
+                      {formData.showLocationPicker && (
+                        <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-semibold mb-3">Search for Location</h4>
+                          <div className="flex gap-2 mb-4">
+                            <input
+                              type="text"
+                              value={formData.locationSearchQuery}
+                              onChange={(e) => setFormData(prev => ({ ...prev, locationSearchQuery: e.target.value }))}
+                              placeholder="Enter address, landmark, or area..."
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <button
+                              onClick={handleLocationSearch}
+                              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                            >
+                              Search
+                            </button>
+                          </div>
+                          
+                          {/* Interactive Map for Location Selection */}
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <h5 className="font-medium mb-2">Or Click on Map to Set Location</h5>
+                            <div className="relative">
+                              <iframe
+                                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk&q=Colombo,Sri+Lanka&zoom=12&maptype=roadmap`}
+                                width="100%"
+                                height="300"
+                                style={{ border: 0 }}
+                                allowFullScreen=""
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                                className="rounded-lg"
+                                title="Location Picker Map"
+                              />
+                              <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded shadow-sm text-xs text-gray-600">
+                                Click to set location
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Click anywhere on the map to set your pickup location
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Custom Location Preview */}
+                      {formData.customLocationSet && formData.customLocation && (
+                        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <div className="flex-1">
+                              <p className="font-medium text-green-800">Custom Location Set</p>
+                              <p className="text-sm text-green-700 mt-1">
+                                {formData.customLocation.address}
+                              </p>
+                              <p className="text-xs text-green-600 mt-1">
+                                Coordinates: {formData.customLocation.latitude.toFixed(6)}, {formData.customLocation.longitude.toFixed(6)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={useCustomLocation}
+                              className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
+                            >
+                              Use This Location
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* GPS Location Display */}
                       {formData.locationAvailable && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-                          <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <div>
-                            <p className="font-medium text-green-800">Location Captured Successfully</p>
-                            <p className="text-sm text-green-700 mt-1">
-                              Coordinates: {formData.location?.latitude.toFixed(6)}, {formData.location?.longitude.toFixed(6)}
+                        <div className="space-y-4">
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                            <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <div>
+                              <p className="font-medium text-green-800">Location Captured Successfully</p>
+                              <p className="text-sm text-green-700 mt-1">
+                                Coordinates: {formData.location?.latitude.toFixed(6)}, {formData.location?.longitude.toFixed(6)}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Map Display */}
+                          <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              Your Location on Map
+                            </h4>
+                            <div className="relative">
+                              <iframe
+                                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk&q=${formData.location?.latitude},${formData.location?.longitude}&zoom=15&maptype=roadmap`}
+                                width="100%"
+                                height="300"
+                                style={{ border: 0 }}
+                                allowFullScreen=""
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                                className="rounded-lg"
+                                title="User Location Map"
+                              />
+                              <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded shadow-sm text-xs text-gray-600">
+                                📍 Your Location
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              This map shows your pickup location for scheduling
                             </p>
                           </div>
                         </div>
@@ -537,15 +755,21 @@ const WasteForm = () => {
                             <div>
                               <p className="font-medium text-yellow-800">Location Access Denied or Unavailable</p>
                               <p className="text-sm text-yellow-700 mt-1">
-                                You'll need to enter your address manually in the next steps.
+                                You can use the custom location option above to set your pickup location manually.
                               </p>
                             </div>
                           </div>
                           <button
                             onClick={requestGeolocation}
-                            className="text-sm bg-yellow-100 text-yellow-800 px-4 py-2 rounded hover:bg-yellow-200 transition-colors"
+                            className="text-sm bg-yellow-100 text-yellow-800 px-4 py-2 rounded hover:bg-yellow-200 transition-colors mr-2"
                           >
-                            Try Again
+                            Try GPS Again
+                          </button>
+                          <button
+                            onClick={toggleLocationPicker}
+                            className="text-sm bg-green-100 text-green-800 px-4 py-2 rounded hover:bg-green-200 transition-colors"
+                          >
+                            Set Custom Location
                           </button>
                         </div>
                       )}
@@ -584,6 +808,21 @@ const WasteForm = () => {
                         required
                       />
                       <p className="text-xs text-gray-500 mt-1">Example: 2.5 kg</p>
+                      
+                      {formData.selectedCategory && formData.weight > 0 && (
+                        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-medium text-green-800">Estimated Payback:</span>
+                            <span className="text-lg font-bold text-green-600">
+                              LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs text-green-700">Rate: LKR {getRatePerKg(formData.selectedCategory).toFixed(2)}/kg</span>
+                            <span className="text-xs text-green-700">Weight: {formData.weight} kg</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -594,25 +833,54 @@ const WasteForm = () => {
                   <h2 className="text-2xl font-bold mb-2">Payback Calculation</h2>
                   <p className="text-gray-600 mb-8">Review your estimated payback amount</p>
                   
-                  <div className="max-w-2xl bg-green-50 border border-green-200 rounded-lg p-6">
-                    <div className="space-y-4">
-                      <div className="flex justify-between">
-                        <span className="font-medium">Category:</span>
-                        <span>{formData.selectedCategory || 'Not selected'}</span>
+                  <div className="max-w-4xl space-y-6">
+                    {/* Current Submission Calculation */}
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold mb-4 text-green-800">Your Submission</h3>
+                      <div className="space-y-4">
+                        <div className="flex justify-between">
+                          <span className="font-medium">Category:</span>
+                          <span>{formData.selectedCategory || 'Not selected'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Total Weight:</span>
+                          <span>{formData.weight || 0} kg</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Rate per kg:</span>
+                          <span>LKR {getRatePerKg(formData.selectedCategory).toFixed(2)}</span>
+                        </div>
+                        <hr className="border-green-300" />
+                        <div className="flex justify-between text-xl font-bold">
+                          <span>Total Payback:</span>
+                          <span className="text-green-600">LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium">Total Weight:</span>
-                        <span>{formData.weight || 0} kg</span>
+                    </div>
+
+                    {/* Category Rates Overview */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold mb-4 text-gray-800">Current Category Rates</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {categories.map((cat) => (
+                          <div key={cat.name} className={`p-3 rounded-lg border-2 ${
+                            formData.selectedCategory === cat.name 
+                              ? 'border-green-500 bg-green-100' 
+                              : 'border-gray-200 bg-white'
+                          }`}>
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-sm">{cat.name}</span>
+                              <span className="text-lg font-bold text-green-600">
+                                LKR {cat.ratePerKg.toFixed(2)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1">per kilogram</p>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium">Rate per kg:</span>
-                        <span>LKR 5.00</span>
-                      </div>
-                      <hr className="border-green-300" />
-                      <div className="flex justify-between text-xl font-bold">
-                        <span>Total Payback:</span>
-                        <span className="text-green-600">LKR {((formData.weight || 0) * 5).toFixed(2)}</span>
-                      </div>
+                      <p className="text-xs text-gray-600 mt-4">
+                        * Rates are subject to market conditions and may vary
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -624,19 +892,51 @@ const WasteForm = () => {
                   <p className="text-gray-600 mb-8">Select a convenient date and time for pickup</p>
                   
                   {formData.locationAvailable && (
-                    <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <div>
-                          <p className="font-medium text-green-800">GPS Location Captured</p>
-                          <p className="text-sm text-green-700 mt-1">
-                            Lat: {formData.location?.latitude.toFixed(6)}, Long: {formData.location?.longitude.toFixed(6)}
-                          </p>
-                          <p className="text-xs text-green-600 mt-1">Your exact location has been saved for pickup</p>
+                    <div className="mb-6 space-y-4">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <div>
+                            <p className="font-medium text-green-800">GPS Location Captured</p>
+                            <p className="text-sm text-green-700 mt-1">
+                              Lat: {formData.location?.latitude.toFixed(6)}, Long: {formData.location?.longitude.toFixed(6)}
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">Your exact location has been saved for pickup</p>
+                          </div>
                         </div>
+                      </div>
+                      
+                      {/* Map Display for Pickup Location */}
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Pickup Location Map
+                        </h4>
+                        <div className="relative">
+                          <iframe
+                            src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk&q=${formData.location?.latitude},${formData.location?.longitude}&zoom=16&maptype=roadmap`}
+                            width="100%"
+                            height="250"
+                            style={{ border: 0 }}
+                            allowFullScreen=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                            className="rounded-lg"
+                            title="Pickup Location Map"
+                          />
+                          <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded shadow-sm text-xs text-gray-600">
+                            🚚 Pickup Location
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          This is where our collection team will come to pick up your recyclables
+                        </p>
                       </div>
                     </div>
                   )}
@@ -797,7 +1097,7 @@ const WasteForm = () => {
                         <p><span className="font-medium">Method:</span> {formData.submissionMethod}</p>
                         <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
                         <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
-                        <p><span className="font-medium">Estimated Payback:</span> LKR {((formData.weight || 0) * 5).toFixed(2)}</p>
+                        <p><span className="font-medium">Estimated Payback:</span> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</p>
                         {formData.submissionMethod === 'Home Pickup' && (
                           <>
                             <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>
