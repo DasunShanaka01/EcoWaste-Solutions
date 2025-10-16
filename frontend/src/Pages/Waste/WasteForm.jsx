@@ -45,12 +45,24 @@ const WasteForm = () => {
   }, [user, loading]);
 
   const categories = [
-    { name: 'E-waste', image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=300' },
-    { name: 'Plastic', image: 'https://images.unsplash.com/photo-1621451537084-482c73073a0f?w=300' },
-    { name: 'Glass', image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=300' },
-    { name: 'Aluminum', image: 'https://images.unsplash.com/photo-1657742239061-64b6de9e0c4a?w=300' },
-    { name: 'Paper/Cardboard', image: 'https://images.unsplash.com/photo-1719600804011-3bff3909b183?w=300' }
+    { name: 'E-waste', image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=300', ratePerKg: 15.00 },
+    { name: 'Plastic', image: 'https://images.unsplash.com/photo-1621451537084-482c73073a0f?w=300', ratePerKg: 8.00 },
+    { name: 'Glass', image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=300', ratePerKg: 6.00 },
+    { name: 'Aluminum', image: 'https://images.unsplash.com/photo-1657742239061-64b6de9e0c4a?w=300', ratePerKg: 12.00 },
+    { name: 'Paper/Cardboard', image: 'https://images.unsplash.com/photo-1719600804011-3bff3909b183?w=300', ratePerKg: 4.00 }
   ];
+
+  // Function to get rate per kg for selected category
+  const getRatePerKg = (categoryName) => {
+    const category = categories.find(cat => cat.name === categoryName);
+    return category ? category.ratePerKg : 5.00; // Default rate if category not found
+  };
+
+  // Function to calculate payback amount
+  const calculatePayback = (weight, categoryName) => {
+    const rate = getRatePerKg(categoryName);
+    return (weight || 0) * rate;
+  };
 
   const steps = [
     { id: 1, name: 'Submit Recyclables' },
@@ -171,20 +183,6 @@ const WasteForm = () => {
     }
   };
 
-  const handleMapClick = (event) => {
-    const lat = event.latLng.lat();
-    const lng = event.latLng.lng();
-    
-    setFormData(prev => ({
-      ...prev,
-      customLocation: {
-        latitude: lat,
-        longitude: lng,
-        address: `Custom Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`
-      },
-      customLocationSet: true
-    }));
-  };
 
   const toggleLocationPicker = () => {
     setFormData(prev => ({ 
@@ -257,7 +255,7 @@ const WasteForm = () => {
       formDataToSend.append('submissionMethod', formData.submissionMethod);
       formDataToSend.append('status', 'Pending');
       formDataToSend.append('totalWeightKg', String(formData.weight || 0));
-      formDataToSend.append('totalPaybackAmount', String((formData.weight || 0) * 5));
+      formDataToSend.append('totalPaybackAmount', String(calculatePayback(formData.weight, formData.selectedCategory)));
       formDataToSend.append('paymentMethod', 'Bank Transfer');
       formDataToSend.append('paymentStatus', 'Pending');
       
@@ -276,7 +274,7 @@ const WasteForm = () => {
         itemType: formData.itemDescription || 'N/A',
         quantity: 1,
         estimatedWeightKg: formData.weight || 0,
-        estimatedPayback: (formData.weight || 0) * 5
+        estimatedPayback: calculatePayback(formData.weight, formData.selectedCategory)
       }];
       formDataToSend.append('items', JSON.stringify(items));
       
@@ -442,6 +440,9 @@ const WasteForm = () => {
                       >
                         <img src={cat.image} alt={cat.name} className="w-full h-32 object-cover rounded mb-2" />
                         <p className="text-center text-sm font-medium">{cat.name}</p>
+                        <p className="text-center text-xs text-green-600 font-semibold mt-1">
+                          LKR {cat.ratePerKg}/kg
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -807,6 +808,21 @@ const WasteForm = () => {
                         required
                       />
                       <p className="text-xs text-gray-500 mt-1">Example: 2.5 kg</p>
+                      
+                      {formData.selectedCategory && formData.weight > 0 && (
+                        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-medium text-green-800">Estimated Payback:</span>
+                            <span className="text-lg font-bold text-green-600">
+                              LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs text-green-700">Rate: LKR {getRatePerKg(formData.selectedCategory).toFixed(2)}/kg</span>
+                            <span className="text-xs text-green-700">Weight: {formData.weight} kg</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -817,25 +833,54 @@ const WasteForm = () => {
                   <h2 className="text-2xl font-bold mb-2">Payback Calculation</h2>
                   <p className="text-gray-600 mb-8">Review your estimated payback amount</p>
                   
-                  <div className="max-w-2xl bg-green-50 border border-green-200 rounded-lg p-6">
-                    <div className="space-y-4">
-                      <div className="flex justify-between">
-                        <span className="font-medium">Category:</span>
-                        <span>{formData.selectedCategory || 'Not selected'}</span>
+                  <div className="max-w-4xl space-y-6">
+                    {/* Current Submission Calculation */}
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold mb-4 text-green-800">Your Submission</h3>
+                      <div className="space-y-4">
+                        <div className="flex justify-between">
+                          <span className="font-medium">Category:</span>
+                          <span>{formData.selectedCategory || 'Not selected'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Total Weight:</span>
+                          <span>{formData.weight || 0} kg</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Rate per kg:</span>
+                          <span>LKR {getRatePerKg(formData.selectedCategory).toFixed(2)}</span>
+                        </div>
+                        <hr className="border-green-300" />
+                        <div className="flex justify-between text-xl font-bold">
+                          <span>Total Payback:</span>
+                          <span className="text-green-600">LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium">Total Weight:</span>
-                        <span>{formData.weight || 0} kg</span>
+                    </div>
+
+                    {/* Category Rates Overview */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold mb-4 text-gray-800">Current Category Rates</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {categories.map((cat) => (
+                          <div key={cat.name} className={`p-3 rounded-lg border-2 ${
+                            formData.selectedCategory === cat.name 
+                              ? 'border-green-500 bg-green-100' 
+                              : 'border-gray-200 bg-white'
+                          }`}>
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-sm">{cat.name}</span>
+                              <span className="text-lg font-bold text-green-600">
+                                LKR {cat.ratePerKg.toFixed(2)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1">per kilogram</p>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium">Rate per kg:</span>
-                        <span>LKR 5.00</span>
-                      </div>
-                      <hr className="border-green-300" />
-                      <div className="flex justify-between text-xl font-bold">
-                        <span>Total Payback:</span>
-                        <span className="text-green-600">LKR {((formData.weight || 0) * 5).toFixed(2)}</span>
-                      </div>
+                      <p className="text-xs text-gray-600 mt-4">
+                        * Rates are subject to market conditions and may vary
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1052,7 +1097,7 @@ const WasteForm = () => {
                         <p><span className="font-medium">Method:</span> {formData.submissionMethod}</p>
                         <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
                         <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
-                        <p><span className="font-medium">Estimated Payback:</span> LKR {((formData.weight || 0) * 5).toFixed(2)}</p>
+                        <p><span className="font-medium">Estimated Payback:</span> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</p>
                         {formData.submissionMethod === 'Home Pickup' && (
                           <>
                             <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>

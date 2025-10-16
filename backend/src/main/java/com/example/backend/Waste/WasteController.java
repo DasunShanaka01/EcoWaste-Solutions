@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.bson.types.ObjectId;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -190,6 +192,59 @@ public class WasteController {
 			return new ResponseEntity<>(HttpStatus.NO_CONTENT);
 		} else {
 			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+		}
+	}
+
+	// Get waste submissions by userId
+	@GetMapping("/user/{userId}")
+	public ResponseEntity<List<Waste>> getWastesByUserId(@PathVariable String userId) {
+		List<Waste> wastes = wasteService.findByUserIdOrderBySubmissionDateDesc(userId);
+		return new ResponseEntity<>(wastes, HttpStatus.OK);
+	}
+
+	// Update waste submission (JSON-based for basic updates)
+	@PutMapping("/{id}/update")
+	public ResponseEntity<Waste> updateWasteBasic(
+			@PathVariable ObjectId id,
+			@RequestBody Map<String, Object> updates) {
+		try {
+			Optional<Waste> existingWaste = wasteService.findById(id);
+			if (existingWaste.isPresent()) {
+				Waste wasteToUpdate = existingWaste.get();
+
+				// Only allow updates to specific fields
+				if (updates.containsKey("submissionMethod")) {
+					wasteToUpdate.setSubmissionMethod((String) updates.get("submissionMethod"));
+				}
+				if (updates.containsKey("totalWeightKg")) {
+					wasteToUpdate.setTotalWeightKg(((Number) updates.get("totalWeightKg")).doubleValue());
+				}
+				if (updates.containsKey("totalPaybackAmount")) {
+					wasteToUpdate.setTotalPaybackAmount(((Number) updates.get("totalPaybackAmount")).doubleValue());
+				}
+				if (updates.containsKey("pickup")) {
+					// Parse pickup details from JSON
+					ObjectMapper objectMapper = new ObjectMapper();
+					Waste.PickupDetails pickup = objectMapper.convertValue(updates.get("pickup"),
+							Waste.PickupDetails.class);
+					wasteToUpdate.setPickup(pickup);
+				}
+				if (updates.containsKey("items")) {
+					// Parse items from JSON
+					ObjectMapper objectMapper = new ObjectMapper();
+					List<Waste.Item> items = objectMapper.convertValue(updates.get("items"),
+							objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
+					wasteToUpdate.setItems(items);
+				}
+
+				Waste updatedWaste = wasteService.update(wasteToUpdate);
+				return new ResponseEntity<>(updatedWaste, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
