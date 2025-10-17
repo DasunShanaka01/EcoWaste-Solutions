@@ -19,7 +19,7 @@ export default function AdminDashboard() {
   const fetchWasteData = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/waste/wastes', {
+  const response = await fetch('http://localhost:8081/api/waste/wastes', {
         method: 'GET',
         credentials: 'include'
       });

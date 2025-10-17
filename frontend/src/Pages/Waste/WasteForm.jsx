@@ -302,7 +302,7 @@ const WasteForm = () => {
       }
 
       console.log('Sending request to backend...');
-      const response = await fetch('http://localhost:8080/api/waste/add', {
+  const response = await fetch('http://localhost:8081/api/waste/add', {
         method: 'POST',
         body: formDataToSend,
         credentials: 'include' // Include cookies for authentication
