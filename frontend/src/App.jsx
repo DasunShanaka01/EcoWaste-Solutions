@@ -14,6 +14,8 @@ import Login from './Pages/Users/Login.jsx';
 import UserProfile from './Pages/Users/UserProfile.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { UserProvider } from './Pages/Users/UserContext.jsx'; // ✅ import context provider
+import ScheduleSpecial from './Pages/SpecialWaste/ScheduleSpecial.jsx';
+import ManageSpecial from './Pages/SpecialWaste/ManageSpecial.jsx';
 
 function AppContent() {
   const location = useLocation();
@@ -48,6 +50,22 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <WasteForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/special/schedule"
+          element={
+            <ProtectedRoute>
+              <ScheduleSpecial />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/special/manage"
+          element={
+            <ProtectedRoute>
+              <ManageSpecial />
             </ProtectedRoute>
           }
         />

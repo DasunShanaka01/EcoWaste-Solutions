@@ -20,6 +20,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/waste/**").permitAll()
+                        .requestMatchers("/api/special-collection/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("OPTIONS", "/**").permitAll()
                         .anyRequest().authenticated())
