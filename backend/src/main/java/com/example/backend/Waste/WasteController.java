@@ -193,13 +193,22 @@ public class WasteController {
 	}
 
 	@DeleteMapping("/{id}")
-	public ResponseEntity<Void> deleteWaste(@PathVariable ObjectId id) {
-		Optional<Waste> existingWaste = wasteService.findById(id);
-		if (existingWaste.isPresent()) {
-			wasteService.deleteById(id);
-			return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-		} else {
-			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+	public ResponseEntity<?> deleteWaste(@PathVariable String id) {
+		try {
+			// Convert string to ObjectId
+			ObjectId objectId = new ObjectId(id);
+			Optional<Waste> existingWaste = wasteService.findById(objectId);
+			if (existingWaste.isPresent()) {
+				wasteService.deleteById(objectId);
+				return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+			} else {
+				System.err.println("Waste not found with ID: " + id);
+				return new ResponseEntity<>("Waste not found", HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			System.err.println("Error deleting waste with ID " + id + ": " + e.getMessage());
+			e.printStackTrace();
+			return new ResponseEntity<>("Error deleting waste: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

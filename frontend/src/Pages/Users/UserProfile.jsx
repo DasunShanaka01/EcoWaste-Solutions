@@ -107,13 +107,33 @@ export default function UserProfile() {
     }
 
     try {
-      await api.deleteWasteSubmission(wasteId);
+      // Ensure wasteId is a string - handle various object formats
+      let idString;
+      if (typeof wasteId === 'string') {
+        idString = wasteId;
+      } else if (wasteId && typeof wasteId === 'object') {
+        // Handle MongoDB ObjectId objects
+        idString = wasteId.toString() || wasteId.$oid || wasteId.id || wasteId._id;
+      } else {
+        idString = String(wasteId);
+      }
+      
+      console.log("Attempting to delete waste with ID:", idString);
+      console.log("ID type:", typeof idString);
+      
+      if (!idString || idString === 'undefined' || idString === 'null') {
+        throw new Error("Invalid waste ID");
+      }
+      
+      await api.deleteWasteSubmission(idString);
       setSuccess("Waste submission deleted successfully!");
+      setError(""); // Clear any previous errors
       // Refresh the waste submissions list
       fetchWasteSubmissions(user.id || user._id);
     } catch (err) {
       console.error("Error deleting waste submission:", err);
-      setError("Failed to delete waste submission. Please try again.");
+      const errorMessage = err.response?.data?.message || err.response?.data || err.message || "Failed to delete waste submission. Please try again.";
+      setError(errorMessage);
     }
   };
 
@@ -187,7 +207,7 @@ export default function UserProfile() {
         }]
       };
 
-      await api.updateWasteSubmission(editingWaste.id, updateData);
+      await api.updateWasteSubmission(editingWaste.id?.toString() || editingWaste._id?.toString(), updateData);
       setSuccess("Waste submission updated successfully!");
       setShowEditModal(false);
       setEditingWaste(null);
@@ -712,8 +732,29 @@ export default function UserProfile() {
               ) : (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {wasteSubmissions.map((submission, index) => (
-                      <div key={submission.id || index} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    {wasteSubmissions.map((submission, index) => {
+                      // Extract ID for React key
+                      let keyId = `waste-${index}`;
+                      if (submission.id) {
+                        if (typeof submission.id === 'string') {
+                          keyId = submission.id;
+                        } else if (submission.id.$oid) {
+                          keyId = submission.id.$oid;
+                        } else if (submission.id.toString) {
+                          keyId = submission.id.toString();
+                        }
+                      } else if (submission._id) {
+                        if (typeof submission._id === 'string') {
+                          keyId = submission._id;
+                        } else if (submission._id.$oid) {
+                          keyId = submission._id.$oid;
+                        } else if (submission._id.toString) {
+                          keyId = submission._id.toString();
+                        }
+                      }
+                      
+                      return (
+                      <div key={keyId} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -766,7 +807,35 @@ export default function UserProfile() {
                                 </button>
                               )}
                               <button
-                                onClick={() => handleDeleteWaste(submission.id)}
+                                onClick={() => {
+                                  // Extract ID from various possible formats
+                                  let idToUse = null;
+                                  
+                                  if (submission.id) {
+                                    if (typeof submission.id === 'string') {
+                                      idToUse = submission.id;
+                                    } else if (submission.id.$oid) {
+                                      idToUse = submission.id.$oid;
+                                    } else if (submission.id.toString) {
+                                      idToUse = submission.id.toString();
+                                    }
+                                  } else if (submission._id) {
+                                    if (typeof submission._id === 'string') {
+                                      idToUse = submission._id;
+                                    } else if (submission._id.$oid) {
+                                      idToUse = submission._id.$oid;
+                                    } else if (submission._id.toString) {
+                                      idToUse = submission._id.toString();
+                                    }
+                                  }
+                                  
+                                  console.log("Extracted ID for delete:", idToUse);
+                                  if (idToUse) {
+                                    handleDeleteWaste(idToUse);
+                                  } else {
+                                    setError("Unable to determine waste ID for deletion");
+                                  }
+                                }}
                                 className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
                                 title="Delete submission"
                               >
@@ -827,7 +896,8 @@ export default function UserProfile() {
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   
                   <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
