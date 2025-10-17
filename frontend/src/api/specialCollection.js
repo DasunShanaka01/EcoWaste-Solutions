@@ -50,6 +50,10 @@ const scApi = {
   downloadReceipt: async (id) => {
     const res = await axios.get(`${API_URL}/receipt/${id}`, { withCredentials: true, responseType: 'blob' });
     return res;
+  },
+  cancel: async (id) => {
+    const res = await axios.post(`${API_URL}/cancel/${id}`, {}, { withCredentials: true });
+    return res.data;
   }
 };
 

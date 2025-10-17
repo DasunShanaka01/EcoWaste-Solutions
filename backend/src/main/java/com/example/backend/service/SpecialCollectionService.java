@@ -16,6 +16,7 @@ public interface SpecialCollectionService {
     SpecialCollection markPaid(String userId, String collectionId);
     SpecialCollection markCashPending(String userId, String collectionId);
     SpecialCollection markUnpaid(String userId, String collectionId, String method);
+    SpecialCollection cancelCollection(String userId, String collectionId);
 }
 
 

@@ -134,6 +134,22 @@ public class SpecialCollectionController {
         res.put("paymentStatus", sc.getPaymentStatus());
         return ResponseEntity.ok(res);
     }
+
+    @PostMapping("/cancel/{id}")
+    public ResponseEntity<?> cancelCollection(HttpServletRequest request, @PathVariable("id") String id) {
+        String userId = getUserIdFromCookie(request);
+        if (userId == null) return ResponseEntity.status(401).build();
+        try {
+            SpecialCollection sc = specialCollectionService.cancelCollection(userId, id);
+            Map<String, Object> res = new HashMap<>();
+            res.put("status", "Deleted");
+            res.put("message", "Collection cancelled and deleted successfully");
+            res.put("deletedId", sc.getId());
+            return ResponseEntity.ok(res);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }
 
 

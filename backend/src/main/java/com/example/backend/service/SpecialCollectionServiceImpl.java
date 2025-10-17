@@ -10,6 +10,8 @@ import com.example.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -117,6 +119,10 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         sc.setDate(req.date);
         sc.setTimeSlot(storageSlot);
         sc.setLocation(req.location);
+        if (req.coordinates != null) {
+            sc.setLatitude(req.coordinates.latitude);
+            sc.setLongitude(req.coordinates.longitude);
+        }
         sc.setInstructions(req.instructions);
         sc.setFee(calculateFee(toFeeRequest(req)));
         sc.setStatus("Scheduled");
@@ -134,11 +140,36 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         if (!sc.getUserId().equals(userId)) {
             throw new CustomException("Not authorized to modify this collection");
         }
-        // simplistic window: must be >24h before (skip actual time calc for brevity)
-        // enforce availability
+        
+        // Check if rescheduling is allowed (more than 24 hours before scheduled time)
         String storageSlot2 = timeSlot;
-        if (timeSlot != null && timeSlot.toLowerCase().startsWith("morning")) storageSlot2 = "Morning";
-        if (timeSlot != null && timeSlot.toLowerCase().startsWith("afternoon")) storageSlot2 = "Afternoon";
+        try {
+            LocalDate scheduledDate = LocalDate.parse(date);
+            LocalDateTime scheduledDateTime = scheduledDate.atStartOfDay();
+            
+            // Add time based on slot
+            if (timeSlot != null && timeSlot.toLowerCase().startsWith("morning")) {
+                storageSlot2 = "Morning";
+                scheduledDateTime = scheduledDate.atTime(9, 30); // Morning slot starts at 9:30
+            } else if (timeSlot != null && timeSlot.toLowerCase().startsWith("afternoon")) {
+                storageSlot2 = "Afternoon";
+                scheduledDateTime = scheduledDate.atTime(15, 0); // Afternoon slot starts at 15:00
+            }
+            
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime twentyFourHoursFromNow = now.plusHours(24);
+            
+            if (scheduledDateTime.isBefore(twentyFourHoursFromNow)) {
+                throw new CustomException("Rescheduling is only allowed more than 24 hours before the scheduled time. Please schedule a new collection instead.");
+            }
+        } catch (Exception e) {
+            if (e instanceof CustomException) {
+                throw e;
+            }
+            throw new CustomException("Invalid date format or time calculation error");
+        }
+        
+        // enforce availability
         boolean ok = getAvailableSlots(date).stream().anyMatch(s -> s.equalsIgnoreCase(timeSlot));
         if (!ok) {
             throw new CustomException("No slots available for selected date/time");
@@ -208,6 +239,44 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
             emailService.sendPaymentNotification(user.getEmail(), saved.getId(), saved.getFee(), method == null ? "Card" : method, false);
         }
         return saved;
+    }
+
+    @Override
+    public SpecialCollection cancelCollection(String userId, String collectionId) {
+        SpecialCollection sc = specialCollectionRepository.findById(collectionId)
+                .orElseThrow(() -> new CustomException("Collection not found"));
+        if (!sc.getUserId().equals(userId)) {
+            throw new CustomException("Not authorized to modify this collection");
+        }
+        
+        // Check if cancellation is allowed (more than 8 hours before scheduled time)
+        try {
+            LocalDate scheduledDate = LocalDate.parse(sc.getDate());
+            LocalDateTime scheduledDateTime = scheduledDate.atStartOfDay();
+            
+            // Add time based on slot
+            if (sc.getTimeSlot() != null && sc.getTimeSlot().toLowerCase().startsWith("morning")) {
+                scheduledDateTime = scheduledDate.atTime(9, 30); // Morning slot starts at 9:30
+            } else if (sc.getTimeSlot() != null && sc.getTimeSlot().toLowerCase().startsWith("afternoon")) {
+                scheduledDateTime = scheduledDate.atTime(15, 0); // Afternoon slot starts at 15:00
+            }
+            
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime eightHoursFromNow = now.plusHours(8);
+            
+            if (scheduledDateTime.isBefore(eightHoursFromNow)) {
+                throw new CustomException("Cancellation is only allowed more than 8 hours before the scheduled time.");
+            }
+        } catch (Exception e) {
+            if (e instanceof CustomException) {
+                throw e;
+            }
+            throw new CustomException("Invalid date format or time calculation error");
+        }
+        
+        // Delete the collection from database
+        specialCollectionRepository.delete(sc);
+        return sc; // Return the deleted collection for response
     }
 
     private FeeRequest toFeeRequest(ScheduleRequest req) {

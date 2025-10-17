@@ -17,6 +17,8 @@ public class SpecialCollection {
     private String date; // yyyy-MM-dd
     private String timeSlot; // Morning / Afternoon
     private String location;
+    private Double latitude;
+    private Double longitude;
     private String instructions;
     private String status = "Pending";
     private String paymentStatus = "Unpaid";
@@ -94,6 +96,22 @@ public class SpecialCollection {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
     }
 
     public String getInstructions() {
