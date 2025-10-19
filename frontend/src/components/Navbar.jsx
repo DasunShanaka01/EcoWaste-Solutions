@@ -53,7 +53,6 @@ const Navbar = () => {
         return [
           ...baseItems,
           { name: 'Add Waste', path: '/wasteform', icon: '➕' },
-          { name: 'My Collections', path: '/wastecollection', icon: '🗑️' },
           { name: 'Special Collection', path: '/special/schedule', icon: '⭐' },
           { name: 'Manage Collections', path: '/special/manage', icon: '📅' },
           { name: 'Profile', path: '/profile', icon: '👤' }
