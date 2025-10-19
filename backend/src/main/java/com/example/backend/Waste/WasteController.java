@@ -43,6 +43,12 @@ public class WasteController {
 		return new ResponseEntity<>(wasteService.findAll(), HttpStatus.OK);
 	}
 
+	// Get collection history for collectors
+	@GetMapping("/collections")
+	public ResponseEntity<List<Waste>> getCollectionHistory() {
+		return new ResponseEntity<>(wasteService.findAll(), HttpStatus.OK);
+	}
+
 	@GetMapping("/test")
 	public ResponseEntity<String> testEndpoint() {
 		return new ResponseEntity<>("Waste API is working!", HttpStatus.OK);

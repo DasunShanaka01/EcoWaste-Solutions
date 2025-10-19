@@ -6,6 +6,7 @@ import Navbar from './components/Navbar.jsx';
 import WasteCollection from './Pages/Collector/WasteCollection.jsx';
 import AdminDashboard from './Pages/Admin/AdminDashboard.jsx';
 import CollectorDashboard from './Pages/Collector/CollectorDashboard.jsx';
+import CollectionHistory from './Pages/Collector/CollectionHistory.jsx';
 
 import RegisterStep1 from './Pages/Users/RegisterStep1.jsx';
 import EmailVerification from './Pages/Users/EmailVerification.jsx';
@@ -94,6 +95,16 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <CollectorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Collection History */}
+        <Route
+          path="/collector/history"
+          element={
+            <ProtectedRoute>
+              <CollectionHistory />
             </ProtectedRoute>
           }
         />

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
 import scApi from '../../api/specialCollection';
 
 const WasteCollection = () => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [routeStarted, setRouteStarted] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -168,10 +170,37 @@ const WasteCollection = () => {
   };
 
   const startRoute = () => {
-    setRouteStarted(true);
-    setCurrentStep(2);
-    setCurrentStop(mockStops[0]);
-    captureLocation();
+    // Request GPS permission before starting route
+    if (navigator && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // GPS permission granted, start route
+          setRouteStarted(true);
+          setCurrentStep(2);
+          setCurrentStop(mockStops[0]);
+          setFormData(prev => ({
+            ...prev,
+            location: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            }
+          }));
+        },
+        (error) => {
+          // GPS permission denied or error
+          console.warn('GPS permission denied or error:', error);
+          alert('GPS permission is required for waste collection. Please enable location services and try again.');
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    } else {
+      // Geolocation not supported
+      alert('GPS is not supported on this device. Please use a device with GPS capabilities.');
+    }
   };
 
   const captureLocation = () => {
@@ -343,7 +372,13 @@ const WasteCollection = () => {
   };
 
   const confirmAccount = () => {
-    setCurrentStep(4);
+    // Auto-populate weight and waste type from scan data
+    setFormData(prev => ({
+      ...prev,
+      weight: scanResult?.data?.weight || 'Auto-detected',
+      wasteType: scanResult?.data?.wasteType || 'general'
+    }));
+    setCurrentStep(4); // Move to step 4 (Record Weight)
   };
 
   const handleManualWeight = () => {
@@ -369,11 +404,31 @@ const WasteCollection = () => {
       const value = Number(formData.weight);
       if (isNaN(value) || value <= 0) return alert('Please provide a valid weight to update');
       setUpdatingWeight(true);
+      // Calculate payback amount based on waste type and weight
+      const getPaybackRate = (wasteType) => {
+        const rates = {
+          'E-waste': 15.00,
+          'Plastic': 8.00,
+          'Glass': 6.00,
+          'Aluminum': 12.00,
+          'Paper/Cardboard': 4.00,
+          'general': 5.00 // Default rate for general waste
+        };
+        return rates[wasteType] || rates['general'];
+      };
+
+      const wasteType = scanResult?.data?.wasteType || formData.wasteType || 'general';
+      const paybackRate = getPaybackRate(wasteType);
+      const totalPaybackAmount = value * paybackRate;
+
       const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(wasteId)}/update`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ totalWeightKg: value })
+        body: JSON.stringify({ 
+          totalWeightKg: value,
+          totalPaybackAmount: totalPaybackAmount
+        })
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -387,19 +442,26 @@ const WasteCollection = () => {
         ...(prev || {}),
         data: {
           ...(prev?.data || {}),
-          weight: value
+          weight: value,
+          totalPaybackAmount: totalPaybackAmount
         }
       }));
       // also update wastes array if present
       setWastes(prev => prev.map(w => {
         const id = w.id || w._id || (w._id && w._id.$oid) || String(w.id);
         if (id && String(id) === String(wasteId)) {
-          return { ...w, totalWeightKg: value, totalWeight: value, weight: value };
+          return { 
+            ...w, 
+            totalWeightKg: value, 
+            totalWeight: value, 
+            weight: value,
+            totalPaybackAmount: totalPaybackAmount
+          };
         }
         return w;
       }));
       setUpdatingWeight(false);
-      alert('Given weight updated');
+      alert(`Weight updated successfully!\nWaste Type: ${wasteType}\nRate: LKR ${paybackRate.toFixed(2)}/kg\nPayback Amount: LKR ${totalPaybackAmount.toFixed(2)}`);
     } catch (e) {
       console.error('Error updating given weight', e);
       setUpdatingWeight(false);
@@ -499,27 +561,9 @@ const WasteCollection = () => {
       // Remove the corresponding marker from the map so the completed location no longer shows
       setMarkers(prev => Array.isArray(prev) ? prev.filter(m => String(m.pointId) !== String(updateId)) : prev);
 
-      // Now advance UI (clear scanned data and go to next stop)
-      if (nextStop) {
-        setCurrentStop(nextStop);
-        setCurrentStep(2);
-        setScanResult(null);
-        setShowError(false);
-        setShowManualEntry(false);
-        setFormData({
-          tagId: '',
-          accountHolder: '',
-          address: '',
-          weight: '',
-          wasteType: 'general',
-          manualWeight: false,
-          location: formData.location,
-          timestamp: null
-        });
-        captureLocation();
-      } else {
-        setCurrentStep(6);
-      }
+      // Collection completed successfully - redirect to dashboard
+      alert('Collection completed successfully!');
+      navigate('/collector/dashboard');
     } catch (e) {
       console.error('Failed to mark waste complete', e);
       // rollback stats
@@ -535,7 +579,7 @@ const WasteCollection = () => {
     } else if (currentStep === 3) {
       confirmAccount();
     } else if (currentStep === 4) {
-      recordWeight();
+      setCurrentStep(5);
     } else if (currentStep === 5) {
       confirmCollection();
     }
@@ -628,7 +672,7 @@ const WasteCollection = () => {
                       <div>
                         <h3 className="font-semibold text-blue-900 mb-2">Ready to Start Collection</h3>
                         <p className="text-sm text-blue-800">
-                          Click the button below to begin your collection route. GPS location services will be enabled automatically.
+                          Click the button below to begin your collection route. You will be asked to grant GPS permission for location tracking.
                         </p>
                       </div>
                     </div>
@@ -650,28 +694,18 @@ const WasteCollection = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         <div className="flex-1">
-                          <p className="font-medium text-blue-900">Current Stop</p>
-                          <p className="text-sm text-blue-800 mt-1">{currentStop.address}</p>
+                          <p className="font-medium text-blue-900">Current Location (Live GPS)</p>
+                          <p className="text-sm text-blue-800 mt-1">
+                            {formData.location ? 
+                              `Lat: ${formData.location.latitude.toFixed(6)}, Lng: ${formData.location.longitude.toFixed(6)}` : 
+                              'GPS location not available'
+                            }
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {formData.location && (
-                    <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <div>
-                          <p className="font-medium text-green-800">GPS Location Active</p>
-                          <p className="text-sm text-green-700 mt-1">
-                            Lat: {formData.location.latitude.toFixed(6)}, Long: {formData.location.longitude.toFixed(6)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {!scanResult && !showError && !showManualEntry && (
                     <div className="max-w-md mx-auto">
@@ -686,11 +720,11 @@ const WasteCollection = () => {
                         <video ref={videoRef} autoPlay muted playsInline className="w-full h-64 bg-black rounded" />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="flex justify-center">
                         <button
                           onClick={handleScan}
                           disabled={scanning}
-                          className={`w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                          className={`w-full max-w-xs py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
                             scanning
                               ? 'bg-gray-400 cursor-not-allowed text-white'
                               : 'bg-blue-600 hover:bg-blue-700 text-white'
@@ -702,8 +736,6 @@ const WasteCollection = () => {
                           </svg>
                           {scanning ? 'Scanning Tag...' : 'Activate Scanner'}
                         </button>
-                        <button onClick={handleManualQR} className="w-full py-3 rounded-lg border border-gray-300 hover:bg-gray-50">Paste QR Text</button>
-                        <button onClick={handleManualId} className="w-full py-3 rounded-lg border border-gray-300 hover:bg-gray-50">Enter Waste ID</button>
                       </div>
                     </div>
                   )}
@@ -742,39 +774,55 @@ const WasteCollection = () => {
                     <div className="max-w-md mx-auto space-y-4">
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                         <p className="text-sm text-yellow-800">
-                          Manual entry mode. Please provide account details to continue with collection.
+                          Manual entry mode. Please enter the waste ID to verify the account and continue with collection.
                         </p>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium mb-2">Account Number or Address *</label>
+                        <label className="block text-sm font-medium mb-2">Waste ID *</label>
                         <input
                           type="text"
-                          name="address"
-                          value={formData.address}
+                          name="tagId"
+                          value={formData.tagId}
                           onChange={handleInputChange}
-                          placeholder="Enter account number or address"
+                          placeholder="Enter waste ID (e.g., 650a5b3f...)"
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
 
                       <button
-                        onClick={() => {
-                          if (formData.address) {
-                            setScanResult({
-                              success: true,
-                              tagId: 'MANUAL',
-                              address: formData.address,
-                              accountHolder: 'Manual Entry'
-                            });
-                            setShowManualEntry(false);
+                        onClick={async () => {
+                          if (formData.tagId) {
+                            try {
+                              const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(formData.tagId)}/details`, {
+                                method: 'GET',
+                                credentials: 'include'
+                              });
+                              if (!res.ok) {
+                                alert('Waste ID not found. Please check the ID and try again.');
+                                return;
+                              }
+                              const json = await res.json();
+                              setScanResult({ success: true, data: json });
+                              setFormData(prev => ({
+                                ...prev,
+                                tagId: json.wasteId || formData.tagId,
+                                accountHolder: json.userName || prev.accountHolder,
+                                address: (json.pickup && json.pickup.address) || (json.location && json.location.address) || prev.address
+                              }));
+                              setShowManualEntry(false);
+                              setCurrentStep(3);
+                            } catch (e) {
+                              console.error('Error fetching waste details', e);
+                              alert('Failed to verify waste ID. Please check your connection and try again.');
+                            }
                           } else {
-                            alert('Please enter account information');
+                            alert('Please enter a waste ID');
                           }
                         }}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition-colors"
                       >
-                        Continue with Manual Entry
+                        Verify Waste ID
                       </button>
                     </div>
                   )}
@@ -862,8 +910,8 @@ const WasteCollection = () => {
               {/* Step 4: Record Weight */}
               {currentStep === 4 && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Record Waste Weight</h2>
-                  <p className="text-gray-600 mb-8">Enter the weight measurement from the vehicle sensor</p>
+                  <h2 className="text-2xl font-bold mb-2">Waste Collection Data</h2>
+                  <p className="text-gray-600 mb-8">Waste type and weight have been automatically detected and recorded</p>
 
                   <div className="max-w-2xl space-y-6">
                     <div className="bg-gray-50 rounded-lg p-6">
@@ -875,59 +923,97 @@ const WasteCollection = () => {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Waste Type *</label>
-                      <select
-                        name="wasteType"
-                        value={formData.wasteType}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      >
-                        <option value="general">General Waste</option>
-                        <option value="recyclable">Recyclable</option>
-                        <option value="organic">Organic</option>
-                      </select>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-6 h-6 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-green-900 mb-2">Automatically Detected Data</h3>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-green-700">Waste Type:</span>
+                              <span className="font-semibold text-green-900 capitalize">{scanResult?.data?.wasteType || 'General Waste'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-700">Weight:</span>
+                              <span className="font-semibold text-green-900">{scanResult?.data?.weight || 'Auto-detected'} kg</span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-green-700 mt-2">
+                            Data was automatically captured from the waste bin sensors and QR code information.
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Weight (kg) *
-                        {formData.manualWeight && (
-                          <span className="ml-2 text-xs text-yellow-600">(Manual Entry)</span>
-                        )}
-                      </label>
-                      <input
-                        type="number"
-                        name="weight"
-                        value={formData.weight}
-                        onChange={handleInputChange}
-                        step="0.1"
-                        placeholder={formData.manualWeight ? "Enter weight manually" : "Auto-detected weight"}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-
-                    {!formData.manualWeight && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    {/* User-provided weight verification */}
+                    {scanResult?.data?.weight && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
                         <div className="flex items-start gap-3">
-                          <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-6 h-6 text-yellow-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
                           <div className="flex-1">
-                            <p className="text-sm text-yellow-800 font-medium">Automatic weight sensor available</p>
-                            <p className="text-xs text-yellow-700 mt-1">
-                              Weight will be automatically detected when you lift the bin. If the sensor fails, click below to enter manually.
+                            <h3 className="font-semibold text-yellow-900 mb-2">User-Provided Weight Verification</h3>
+                            <p className="text-sm text-yellow-800 mb-3">
+                              The user provided a weight of <span className="font-semibold">{scanResult.data.weight} kg</span> for <span className="font-semibold">{scanResult.data.wasteType || 'General Waste'}</span> in their waste submission. 
+                              Please verify this is correct or update if needed.
                             </p>
-                            <button
-                              onClick={handleManualWeight}
-                              className="mt-2 text-xs bg-yellow-100 text-yellow-800 px-3 py-1.5 rounded hover:bg-yellow-200 transition-colors"
-                            >
-                              Enter Weight Manually
-                            </button>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                value={formData.weight || scanResult.data.weight}
+                                onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value }))}
+                                step="0.1"
+                                className="flex-1 px-3 py-2 border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                                placeholder="Enter corrected weight"
+                              />
+                              <button
+                                onClick={updateGivenWeight}
+                                disabled={updatingWeight || !formData.weight}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                                  updatingWeight || !formData.weight
+                                    ? 'bg-gray-300 text-gray-700 cursor-not-allowed'
+                                    : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                }`}
+                              >
+                                {updatingWeight ? 'Updating...' : 'Update Weight'}
+                              </button>
+                            </div>
+                            <p className="text-xs text-yellow-700 mt-2">
+                              If the weight looks incorrect, enter the actual weight and click update. 
+                              Current rate: LKR {(() => {
+                                const rates = {
+                                  'E-waste': 15.00,
+                                  'Plastic': 8.00,
+                                  'Glass': 6.00,
+                                  'Aluminum': 12.00,
+                                  'Paper/Cardboard': 4.00,
+                                  'general': 5.00
+                                };
+                                const wasteType = scanResult?.data?.wasteType || 'general';
+                                return rates[wasteType] || rates['general'];
+                              })()}/kg
+                            </p>
                           </div>
                         </div>
                       </div>
                     )}
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <p className="text-sm text-blue-800 font-medium">Sensor Data Confirmed</p>
+                          <p className="text-xs text-blue-700 mt-1">
+                            The waste collection vehicle's sensors have automatically recorded the weight and waste type. No manual entry required.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="bg-gray-50 rounded-lg p-4 flex items-center gap-2 text-sm text-gray-600">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -946,27 +1032,6 @@ const WasteCollection = () => {
                       )}
                     </div>
 
-                    {/* Display given/stored weight (from scanResult) and recorded weight (from sensor/input) */}
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <p className="text-xs text-gray-500">Given weight (stored)</p>
-                        <p className="text-lg font-semibold text-gray-900 mt-1">{scanResult?.data?.weight ?? scanResult?.data?.weight === 0 ? `${scanResult.data.weight} kg` : '—'}</p>
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-lg p-4">
-                        <p className="text-xs text-gray-500">Recorded weight (this collection)</p>
-                        <p className="text-lg font-semibold text-gray-900 mt-1">{formData.weight ? `${formData.weight} kg` : '—'}</p>
-                        {/* If given weight looks incorrect, allow updating stored weight */}
-                        <div className="mt-3">
-                          <button
-                            onClick={updateGivenWeight}
-                            disabled={updatingWeight}
-                            className={`w-full py-2 rounded-lg text-sm font-medium ${updatingWeight ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                          >
-                            {updatingWeight ? 'Updating…' : 'Update Given Weight'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1031,68 +1096,6 @@ const WasteCollection = () => {
                 </div>
               )}
 
-              {/* Step 6: Route Complete */}
-              {currentStep === 6 && (
-                <div className="text-center py-12">
-                  <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <h2 className="text-3xl font-bold mb-4">Route Completed!</h2>
-                  <p className="text-gray-600 mb-8">All collection stops have been successfully processed</p>
-
-                  <div className="max-w-md mx-auto mb-8">
-                    <div className="bg-green-50 rounded-lg p-6 mb-4">
-                      <h3 className="font-semibold text-green-900 mb-4">Collection Summary</h3>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
-                          <p className="text-xs text-green-700 mt-1">Completed</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                          <p className="text-xs text-gray-600 mt-1">Total Stops</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-yellow-600">{stats.remaining}</p>
-                          <p className="text-xs text-yellow-700 mt-1">Remaining</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-600">
-                        Route completion report has been generated and synced to the system.
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setRouteStarted(false);
-                      setCurrentStep(1);
-                      setCurrentStop(null);
-                      setScanResult(null);
-                      setShowError(false);
-                      setShowManualEntry(false);
-                      setFormData({
-                        tagId: '',
-                        accountHolder: '',
-                        address: '',
-                        weight: '',
-                        wasteType: 'general',
-                        manualWeight: false,
-                        location: null,
-                        timestamp: null
-                      });
-                    }}
-                    className="bg-green-500 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors"
-                  >
-                    Return to Route Overview
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Navigation Buttons */}
@@ -1111,8 +1114,7 @@ const WasteCollection = () => {
                 <button
                   onClick={nextStep}
                   disabled={
-                    (currentStep === 2 && !scanResult) ||
-                    (currentStep === 4 && !formData.weight)
+                    (currentStep === 2 && !scanResult)
                   }
                   className="flex items-center gap-2 px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -1127,16 +1129,16 @@ const WasteCollection = () => {
             {/* Start Route Button */}
             {currentStep === 1 && !routeStarted && (
               <div className="flex justify-end mt-8 pt-6 border-t">
-                <button
-                  onClick={startRoute}
-                  className="flex items-center gap-2 px-8 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Start Collection Route
-                </button>
+                  <button
+                    onClick={startRoute}
+                    className="flex items-center gap-2 px-8 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Start Collection Route (GPS Required)
+                  </button>
               </div>
             )}
           </div>
