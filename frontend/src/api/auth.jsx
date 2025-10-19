@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:8080/api/auth";
+const API_URL = "http://localhost:8081/api/auth";
 
 const api = {
   registerStep1: async (data) => {
@@ -95,7 +95,7 @@ const api = {
 
   // Waste management
   getUserWasteSubmissions: async (userId) => {
-    const res = await axios.get(`http://localhost:8080/api/waste/user/${userId}`, { 
+  const res = await axios.get(`http://localhost:8081/api/waste/user/${userId}`, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
@@ -105,7 +105,7 @@ const api = {
   },
 
   deleteWasteSubmission: async (wasteId) => {
-    const res = await axios.delete(`http://localhost:8080/api/waste/${wasteId}`, { 
+  const res = await axios.delete(`http://localhost:8081/api/waste/${wasteId}`, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
@@ -115,7 +115,7 @@ const api = {
   },
 
   updateWasteSubmission: async (wasteId, updates) => {
-    const res = await axios.put(`http://localhost:8080/api/waste/${wasteId}/update`, updates, { 
+  const res = await axios.put(`http://localhost:8081/api/waste/${wasteId}/update`, updates, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'

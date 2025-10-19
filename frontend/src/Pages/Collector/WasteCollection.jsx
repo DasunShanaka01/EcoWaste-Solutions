@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Map from '../../components/Map';
+import scApi from '../../api/specialCollection';
 
 const WasteCollection = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -20,6 +21,12 @@ const WasteCollection = () => {
     timestamp: null
   });
 
+  // markers fetched from backend waste submissions
+  const [markers, setMarkers] = useState([]);
+  const [wastes, setWastes] = useState([]);
+  const videoRef = useRef(null);
+  const scanLoopRef = useRef(null);
+
   const [stats, setStats] = useState({
     total: 24,
     completed: 8,
@@ -34,6 +41,118 @@ const WasteCollection = () => {
   ];
 
   const [currentStop, setCurrentStop] = useState(null);
+
+  // Load waste submission locations from backend on mount
+  useEffect(() => {
+    const GEOCODE_KEY = "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk"; // same key used in Map.jsx
+
+    const geocodeAddress = async (address) => {
+      if (!address || address.trim() === '') return null;
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GEOCODE_KEY}`;
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        const j = await r.json();
+        if (j.status === 'OK' && Array.isArray(j.results) && j.results.length > 0) {
+          const loc = j.results[0].geometry.location;
+          return { lat: loc.lat, lng: loc.lng, formattedAddress: j.results[0].formatted_address };
+        }
+      } catch (err) {
+        // ignore geocode errors
+      }
+      return null;
+    };
+
+    const fetchWasteLocations = async () => {
+      try {
+        // fetch normal wastes
+        const res = await fetch('http://localhost:8081/api/waste/wastes', { credentials: 'include' });
+        if (!res.ok) {
+          console.error('Failed fetching wastes', res.status);
+        }
+        const data = res.ok ? await res.json() : [];
+
+        const wastesList = Array.isArray(data) ? data : [];
+        setWastes(wastesList);
+
+        const normalMarkers = wastesList.map((w, idx) => {
+          const rawId = w.id || w._id || w._id || w.id;
+          const idStr = rawId && rawId.$oid ? rawId.$oid : (rawId ? String(rawId) : null);
+          const loc = w.location || null;
+          const latVal = loc && (loc.latitude ?? loc.lat ?? loc.latitude);
+          const lngVal = loc && (loc.longitude ?? loc.lng ?? loc.long ?? loc.longitud);
+          if (latVal != null && lngVal != null) {
+            return {
+              lat: Number(latVal),
+              lng: Number(lngVal),
+              address: (loc && (loc.address || loc.addr)) || (w.pickup && w.pickup.address) || w.fullName || '',
+              pointId: idStr || idx,
+              type: 'normal',
+              // include status so Map component can color markers (e.g. 'Complete' or 'Pending')
+              status: w.status || w.state || (w.status === undefined ? null : String(w.status))
+            };
+          }
+          return null;
+        }).filter(Boolean);
+
+        // fetch special collections for this user (if any)
+        let specialMarkers = [];
+        try {
+          const specialList = await scApi.listMine();
+          if (Array.isArray(specialList) && specialList.length > 0) {
+            // geocode each location (best-effort, skip failures)
+            const geoPromises = specialList.map(async (sc, sidx) => {
+              // If the special collection already includes numeric coordinates, use them directly
+              // Common shapes: sc.lat & sc.lng, or sc.location = { lat, lng }
+              const latFromSc = sc && (sc.lat ?? (sc.location && (sc.location.lat ?? sc.location.latitude)) );
+              const lngFromSc = sc && (sc.lng ?? (sc.location && (sc.location.lng ?? sc.location.longitude)) );
+              if (latFromSc != null && lngFromSc != null) {
+                return {
+                  lat: Number(latFromSc),
+                  lng: Number(lngFromSc),
+                  address: (sc.address || (sc.location && sc.location.address)) || String(sc.location || sc.notes || '') || '',
+                  pointId: sc.id || sc.collectionId || `special-${sidx}`,
+                  type: 'special',
+                  status: sc.status || null
+                };
+              }
+
+              // otherwise fall back to geocoding the textual location
+              const addr = typeof sc.location === 'string' ? sc.location : String(sc.location || '');
+              const geo = await geocodeAddress(addr);
+              if (geo) {
+                return {
+                  lat: Number(geo.lat),
+                  lng: Number(geo.lng),
+                  address: geo.formattedAddress || addr,
+                  pointId: sc.id || sc.collectionId || `special-${sidx}`,
+                  type: 'special',
+                  status: sc.status || null
+                };
+              }
+              return null;
+            });
+            const resolved = await Promise.all(geoPromises);
+            specialMarkers = resolved.filter(Boolean);
+          }
+        } catch (e) {
+          // listing special collections may fail if not authenticated; ignore
+        }
+
+        // compute stats from wastesList
+        const totalStops = wastesList.filter(w => w.location && (w.location.latitude != null || w.location.lat != null)).length;
+        const completed = wastesList.filter(w => String(w.status || '').toLowerCase() === 'complete').length;
+        const remaining = Math.max(0, totalStops - completed);
+        setStats({ total: totalStops, completed, remaining });
+
+        setMarkers([...normalMarkers, ...specialMarkers]);
+      } catch (e) {
+        console.error('Error loading waste locations', e);
+      }
+    };
+
+    fetchWasteLocations();
+  }, []);
 
   const steps = [
     { id: 1, name: 'Route Overview' },
@@ -75,33 +194,147 @@ const WasteCollection = () => {
   };
 
   const handleScan = () => {
+    // Start webcam scanner (if supported) or fallback to simulated scan
     setScanning(true);
     setScanResult(null);
     setShowError(false);
-    
-    setTimeout(() => {
-      const success = Math.random() > 0.2;
-      
-      if (success && currentStop) {
-        setScanResult({
-          success: true,
-          tagId: currentStop.tagId,
-          address: currentStop.address,
-          accountHolder: currentStop.accountHolder
+
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (videoRef.current) videoRef.current.srcObject = stream;
+
+        // Use BarcodeDetector if available in the browser (guard via window to satisfy ESLint)
+        const BarcodeDetectorClass = typeof window !== 'undefined' ? window.BarcodeDetector || null : null;
+        if (BarcodeDetectorClass) {
+          const formats = ['qr_code'];
+          const detector = new BarcodeDetectorClass({ formats });
+          scanLoopRef.current = setInterval(async () => {
+            try {
+              if (!videoRef.current) return;
+              const results = await detector.detect(videoRef.current);
+              if (results && results.length > 0) {
+                const q = results[0].rawValue || results[0].displayValue || results[0].raw_text || results[0].rawData;
+                stopCamera();
+                processQR(q);
+              }
+            } catch (err) {
+              // ignore detection errors per loop
+            }
+          }, 800);
+        } else {
+          // No BarcodeDetector: provide user a manual paste fallback after 5s
+          setTimeout(() => {
+            setShowError(true);
+            setScanning(false);
+          }, 5000);
+        }
+      } catch (err) {
+        console.warn('Camera unavailable', err);
+        setShowError(true);
+        setScanning(false);
+      }
+    };
+
+    const stopCamera = () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const tracks = videoRef.current.srcObject.getTracks();
+        tracks.forEach(t => t.stop());
+        videoRef.current.srcObject = null;
+      }
+      if (scanLoopRef.current) {
+        clearInterval(scanLoopRef.current);
+        scanLoopRef.current = null;
+      }
+    };
+
+    const processQR = async (qrData) => {
+      try {
+        // send to backend to parse and get user/waste details
+        const res = await fetch('http://localhost:8081/api/waste/scan-qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ qrData })
         });
+        if (!res.ok) {
+          setShowError(true);
+          setScanning(false);
+          return;
+        }
+        const json = await res.json();
+        setScanResult({ success: true, data: json });
+        // populate verify account form data
         setFormData(prev => ({
           ...prev,
-          tagId: currentStop.tagId,
-          accountHolder: currentStop.accountHolder,
-          address: currentStop.address,
-          timestamp: new Date().toISOString()
+          tagId: json.wasteId || prev.tagId,
+          accountHolder: json.userName || prev.accountHolder,
+          address: json.pickup && json.pickup.address ? json.pickup.address : (json.location && json.location.address ? json.location.address : prev.address)
         }));
         setCurrentStep(3);
-      } else {
+      } catch (e) {
+        console.error('Error processing QR', e);
         setShowError(true);
+      } finally {
+        setScanning(false);
       }
-      setScanning(false);
-    }, 1500);
+    };
+
+    startCamera();
+  };
+
+  // Allow manual QR paste if BarcodeDetector not available
+  const handleManualQR = async () => {
+    const qr = window.prompt('Paste QR text from the code');
+    if (qr) {
+      // process same as scanned
+      try {
+        const res = await fetch('http://localhost:8081/api/waste/scan-qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ qrData: qr })
+        });
+        if (!res.ok) return alert('Failed to resolve QR');
+        const json = await res.json();
+        setScanResult({ success: true, data: json });
+        setFormData(prev => ({
+          ...prev,
+          tagId: json.wasteId || prev.tagId,
+          accountHolder: json.userName || prev.accountHolder,
+          address: json.pickup && json.pickup.address ? json.pickup.address : (json.location && json.location.address ? json.location.address : prev.address)
+        }));
+        setCurrentStep(3);
+      } catch (e) {
+        alert('Error processing QR');
+      }
+    }
+  };
+
+  // Allow manual lookup by waste report ID (no address required)
+  const handleManualId = async () => {
+    const id = window.prompt('Enter waste report ID (example: 650a5b3f... )');
+    if (!id) return;
+    try {
+      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(id)}/details`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      if (!res.ok) return alert('Waste not found');
+      const json = await res.json();
+      // backend returns a map with waste details, populate scanResult and formData
+      setScanResult({ success: true, data: json });
+      setFormData(prev => ({
+        ...prev,
+        tagId: json.wasteId || id,
+        accountHolder: json.userName || prev.accountHolder,
+        address: (json.pickup && json.pickup.address) || (json.location && json.location.address) || prev.address
+      }));
+      setCurrentStep(3);
+    } catch (e) {
+      console.error('Error fetching waste details', e);
+      alert('Failed to fetch waste details');
+    }
   };
 
   const handleManualEntry = () => {
@@ -125,36 +358,172 @@ const WasteCollection = () => {
     setCurrentStep(5);
   };
 
-  const confirmCollection = () => {
+  const [updatingWeight, setUpdatingWeight] = useState(false);
+
+  // Update the given/stored weight on the backend for the current scanned/loaded waste
+  const updateGivenWeight = async () => {
+    try {
+      if (!scanResult || !scanResult.data) return alert('No scanned waste to update');
+      const wasteId = scanResult.data.wasteId || formData.tagId;
+      if (!wasteId) return alert('No waste id available to update');
+      const value = Number(formData.weight);
+      if (isNaN(value) || value <= 0) return alert('Please provide a valid weight to update');
+      setUpdatingWeight(true);
+      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(wasteId)}/update`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ totalWeightKg: value })
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        alert('Failed to update weight: ' + (text || res.status));
+        setUpdatingWeight(false);
+        return;
+      }
+      const updated = await res.json().catch(() => null);
+      // reflect the change locally
+      setScanResult(prev => ({
+        ...(prev || {}),
+        data: {
+          ...(prev?.data || {}),
+          weight: value
+        }
+      }));
+      // also update wastes array if present
+      setWastes(prev => prev.map(w => {
+        const id = w.id || w._id || (w._id && w._id.$oid) || String(w.id);
+        if (id && String(id) === String(wasteId)) {
+          return { ...w, totalWeightKg: value, totalWeight: value, weight: value };
+        }
+        return w;
+      }));
+      setUpdatingWeight(false);
+      alert('Given weight updated');
+    } catch (e) {
+      console.error('Error updating given weight', e);
+      setUpdatingWeight(false);
+      alert('Error updating weight');
+    }
+  };
+
+  const confirmCollection = async () => {
+    // Optimistically update stats
     const newStats = {
       total: stats.total,
       completed: stats.completed + 1,
-      remaining: stats.remaining - 1
+      remaining: Math.max(0, stats.remaining - 1)
     };
     setStats(newStats);
 
-    const currentIndex = mockStops.findIndex(s => s.id === currentStop.id);
-    const nextStop = mockStops[currentIndex + 1] || null;
-    
-    if (nextStop) {
-      setCurrentStop(nextStop);
-      setCurrentStep(2);
-      setScanResult(null);
-      setShowError(false);
-      setShowManualEntry(false);
-      setFormData({
-        tagId: '',
-        accountHolder: '',
-        address: '',
-        weight: '',
-        wasteType: 'general',
-        manualWeight: false,
-        location: formData.location,
-        timestamp: null
+    const currentIndex = mockStops.findIndex(s => s.id === currentStop?.id);
+    const nextStop = currentIndex >= 0 ? (mockStops[currentIndex + 1] || null) : null;
+
+    // Helper to extract string id from waste record
+    const extractId = (w) => {
+      if (!w) return null;
+      if (typeof w === 'string') return w;
+      if (w._id && typeof w._id === 'string') return w._id;
+      if (w._id && w._id.$oid) return w._id.$oid;
+      if (w.id && typeof w.id === 'string') return w.id;
+      if (w.id && w.id.$oid) return w.id.$oid;
+      return null;
+    };
+
+    // Determine the id to update: prefer scanned wasteId, fallback to formData.tagId or matching wastes
+    let updateId = scanResult?.data?.wasteId || formData.tagId || null;
+    if (!updateId) {
+      // try to locate by matching the tag string in qrCodeBase64 or id fields
+      const tag = formData.tagId;
+      if (tag) {
+        const matched = wastes.find(w => (w.qrCodeBase64 && w.qrCodeBase64.includes(tag))) || wastes.find(w => {
+          const idStr = extractId(w);
+          return idStr && (idStr === tag || String(idStr) === String(tag));
+        });
+        updateId = extractId(matched);
+      }
+    }
+
+    try {
+      if (!updateId) {
+        // nothing to update; still advance route/UI
+        if (nextStop) {
+          setCurrentStop(nextStop);
+          setCurrentStep(2);
+          setScanResult(null);
+          setShowError(false);
+          setShowManualEntry(false);
+          setFormData({
+            tagId: '',
+            accountHolder: '',
+            address: '',
+            weight: '',
+            wasteType: 'general',
+            manualWeight: false,
+            location: formData.location,
+            timestamp: null
+          });
+          captureLocation();
+        } else {
+          setCurrentStep(6);
+        }
+        return;
+      }
+
+      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(updateId)}/update`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'Complete' })
       });
-      captureLocation();
-    } else {
-      setCurrentStep(6);
+
+      if (!res.ok) {
+        console.error('Failed to mark waste complete', res.status);
+        alert('Failed to mark waste as complete on server');
+        // rollback stats
+        setStats(prev => ({ total: prev.total, completed: Math.max(0, prev.completed - 1), remaining: prev.remaining + 1 }));
+        return;
+      }
+
+      // Update local wastes array and scanResult
+      setWastes(prev => prev.map(w => {
+        const idStr = extractId(w);
+        if (idStr && String(idStr) === String(updateId)) {
+          return { ...w, status: 'Complete' };
+        }
+        return w;
+      }));
+
+      setScanResult(prev => prev ? ({ ...prev, data: { ...(prev.data || {}), status: 'Complete' } }) : prev );
+
+      // Remove the corresponding marker from the map so the completed location no longer shows
+      setMarkers(prev => Array.isArray(prev) ? prev.filter(m => String(m.pointId) !== String(updateId)) : prev);
+
+      // Now advance UI (clear scanned data and go to next stop)
+      if (nextStop) {
+        setCurrentStop(nextStop);
+        setCurrentStep(2);
+        setScanResult(null);
+        setShowError(false);
+        setShowManualEntry(false);
+        setFormData({
+          tagId: '',
+          accountHolder: '',
+          address: '',
+          weight: '',
+          wasteType: 'general',
+          manualWeight: false,
+          location: formData.location,
+          timestamp: null
+        });
+        captureLocation();
+      } else {
+        setCurrentStep(6);
+      }
+    } catch (e) {
+      console.error('Failed to mark waste complete', e);
+      // rollback stats
+      setStats(prev => ({ total: prev.total, completed: Math.max(0, prev.completed - 1), remaining: prev.remaining + 1 }));
     }
   };
 
@@ -233,7 +602,7 @@ const WasteCollection = () => {
                   <p className="text-gray-600 mb-8">Start your collection route and scan waste tags at each location</p>
 
                   <div className="mb-8">
-                    <Map/>
+                    <Map markers={markers} liveLocation={formData.location ? { lat: formData.location.latitude, lng: formData.location.longitude } : null} />
                   </div>
 
                   <div className="grid grid-cols-3 gap-4 mb-8">
@@ -313,21 +682,29 @@ const WasteCollection = () => {
                         <p className="text-gray-600">Ready to scan waste tag</p>
                       </div>
 
-                      <button
-                        onClick={handleScan}
-                        disabled={scanning}
-                        className={`w-full py-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                          scanning
-                            ? 'bg-gray-400 cursor-not-allowed text-white'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                        }`}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {scanning ? 'Scanning Tag...' : 'Activate Scanner'}
-                      </button>
+                      <div className="mb-4">
+                        <video ref={videoRef} autoPlay muted playsInline className="w-full h-64 bg-black rounded" />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={handleScan}
+                          disabled={scanning}
+                          className={`w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                            scanning
+                              ? 'bg-gray-400 cursor-not-allowed text-white'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          {scanning ? 'Scanning Tag...' : 'Activate Scanner'}
+                        </button>
+                        <button onClick={handleManualQR} className="w-full py-3 rounded-lg border border-gray-300 hover:bg-gray-50">Paste QR Text</button>
+                        <button onClick={handleManualId} className="w-full py-3 rounded-lg border border-gray-300 hover:bg-gray-50">Enter Waste ID</button>
+                      </div>
                     </div>
                   )}
 
@@ -416,15 +793,15 @@ const WasteCollection = () => {
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between py-2 border-b border-green-200">
                             <span className="text-green-700">Tag ID:</span>
-                            <span className="font-mono font-semibold text-green-900">{scanResult.tagId}</span>
+                            <span className="font-mono font-semibold text-green-900">{scanResult.data?.wasteId || scanResult.tagId}</span>
                           </div>
                           <div className="flex justify-between py-2 border-b border-green-200">
                             <span className="text-green-700">Account Holder:</span>
-                            <span className="font-semibold text-green-900">{scanResult.accountHolder}</span>
+                            <span className="font-semibold text-green-900">{scanResult.data?.userName || scanResult.accountHolder}</span>
                           </div>
                           <div className="flex justify-between py-2">
                             <span className="text-green-700">Location:</span>
-                            <span className="font-semibold text-green-900">{scanResult.address}</span>
+                            <span className="font-semibold text-green-900">{(scanResult.data?.pickup && scanResult.data.pickup.address) || (scanResult.data?.location && scanResult.data.location.address) || scanResult.address}</span>
                           </div>
                         </div>
                       </div>
@@ -567,6 +944,28 @@ const WasteCollection = () => {
                           <span>GPS: {formData.location.latitude.toFixed(4)}, {formData.location.longitude.toFixed(4)}</span>
                         </>
                       )}
+                    </div>
+
+                    {/* Display given/stored weight (from scanResult) and recorded weight (from sensor/input) */}
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-500">Given weight (stored)</p>
+                        <p className="text-lg font-semibold text-gray-900 mt-1">{scanResult?.data?.weight ?? scanResult?.data?.weight === 0 ? `${scanResult.data.weight} kg` : '—'}</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-500">Recorded weight (this collection)</p>
+                        <p className="text-lg font-semibold text-gray-900 mt-1">{formData.weight ? `${formData.weight} kg` : '—'}</p>
+                        {/* If given weight looks incorrect, allow updating stored weight */}
+                        <div className="mt-3">
+                          <button
+                            onClick={updateGivenWeight}
+                            disabled={updatingWeight}
+                            className={`w-full py-2 rounded-lg text-sm font-medium ${updatingWeight ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                          >
+                            {updatingWeight ? 'Updating…' : 'Update Given Weight'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -24,7 +24,8 @@ public class Waste {
     private String email;
     private LocalDateTime submissionDate;
     private String submissionMethod; // "Home Pickup" or "Drop-off"
-    private String status; // "Pending", "Processed", "Completed"
+    // Status: only two states used by the collector UI: "Pending" and "Complete"
+    private String status = "Pending"; // default to Pending for new submissions
     private PickupDetails pickup;
     private double totalWeightKg;
     private double totalPaybackAmount;

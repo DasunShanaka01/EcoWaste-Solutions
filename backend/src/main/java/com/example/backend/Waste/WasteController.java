@@ -253,6 +253,13 @@ public class WasteController {
 							objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
 					wasteToUpdate.setItems(items);
 				}
+				// Allow status updates via JSON API (e.g., mark as Complete)
+				if (updates.containsKey("status")) {
+					Object s = updates.get("status");
+					if (s != null) {
+						wasteToUpdate.setStatus(String.valueOf(s));
+					}
+				}
 
 				Waste updatedWaste = wasteService.update(wasteToUpdate);
 				return new ResponseEntity<>(updatedWaste, HttpStatus.OK);

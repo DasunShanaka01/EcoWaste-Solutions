@@ -21,7 +21,7 @@ const QRCodeScanner = ({ onScanResult }) => {
 
     try {
       setError('');
-      const response = await fetch('http://localhost:8080/api/waste/scan-qr', {
+  const response = await fetch('http://localhost:8081/api/waste/scan-qr', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

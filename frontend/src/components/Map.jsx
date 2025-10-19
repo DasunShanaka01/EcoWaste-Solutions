@@ -1,5 +1,5 @@
-import React from 'react';
-import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { GoogleMap, useJsApiLoader, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 
 const containerStyle = {
   width: '100%',
@@ -27,8 +27,48 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
     strokeColor: "white",
   } : {};
 
+  // map ref so we can call fitBounds when markers update
+  const mapRef = useRef(null);
+  const [active, setActive] = useState(null);
+
   // The map should center on the live location if available
   const mapCenter = liveLocation || (markers.length > 0 ? { lat: markers[0].lat, lng: markers[0].lng } : defaultCenter);
+
+  const onLoad = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
+
+  // Fit map bounds to markers and live location when they change
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current) return;
+    try {
+      const bounds = new window.google.maps.LatLngBounds();
+      let added = false;
+      if (Array.isArray(markers) && markers.length > 0) {
+        markers.forEach(m => {
+          if (m && typeof m.lat === 'number' && typeof m.lng === 'number') {
+            bounds.extend({ lat: m.lat, lng: m.lng });
+            added = true;
+          }
+        });
+      }
+      if (liveLocation && typeof liveLocation.lat === 'number' && typeof liveLocation.lng === 'number') {
+        bounds.extend({ lat: liveLocation.lat, lng: liveLocation.lng });
+        added = true;
+      }
+
+      if (added) {
+        mapRef.current.fitBounds(bounds);
+      } else {
+        // fallback center
+        mapRef.current.setCenter(mapCenter);
+        mapRef.current.setZoom(13);
+      }
+    } catch (e) {
+      // ignore errors during bounds calculation
+      // console.warn('Could not fit bounds', e);
+    }
+  }, [isLoaded, markers, liveLocation, mapCenter]);
 
   if (loadError) {
     return <div>Map cannot be loaded right now, sorry.</div>;
@@ -38,7 +78,8 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
     <GoogleMap
       mapContainerStyle={containerStyle}
       center={mapCenter}
-      zoom={15} // Zoom in closer to see the live location clearly
+      zoom={15} // initial zoom; will be adjusted by fitBounds if markers exist
+      onLoad={onLoad}
       options={{
         disableDefaultUI: true, // Optional: clean up the map UI
         zoomControl: true,
@@ -57,13 +98,27 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
       )}
       
       {/* Draw a marker for each collection point */}
-      {markers.map((marker, index) => (
-        <Marker
-          key={marker.pointId || index}
-          position={{ lat: marker.lat, lng: marker.lng }}
-          label={String(index + 1)} // Label markers as 1, 2, 3...
-        />
-      ))}
+      {/* Draw a marker for each collection point */}
+      {markers.map((marker, index) => {
+        const isSpecial = marker.type === 'special';
+        // Determine color by type/status: special -> purple, completed -> green, pending/other -> red
+        const status = marker.status ? String(marker.status).toLowerCase() : null;
+        const iconUrl = isSpecial
+          ? `http://maps.google.com/mapfiles/ms/icons/purple-dot.png`
+          : (status === 'complete'
+            ? `http://maps.google.com/mapfiles/ms/icons/green-dot.png`
+            : `http://maps.google.com/mapfiles/ms/icons/red-dot.png`);
+
+        return (
+          <Marker
+            key={marker.pointId || index}
+            position={{ lat: marker.lat, lng: marker.lng }}
+            label={String(index + 1)}
+            icon={{ url: iconUrl }}
+            onClick={() => setActive(marker)}
+          />
+        );
+      })}
 
       {/* Draw the live location marker if it exists */}
       {liveLocation && (
@@ -71,7 +126,19 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
           position={liveLocation}
           icon={liveLocationIcon}
           title="Your Current Location"
+          onClick={() => setActive({ ...liveLocation, address: 'You are here', type: 'live' })}
         />
+      )}
+
+      {/* InfoWindow for active marker */}
+      {active && (
+        <InfoWindow position={{ lat: active.lat, lng: active.lng }} onCloseClick={() => setActive(null)}>
+          <div style={{ maxWidth: 220 }}>
+            <div style={{ fontWeight: 600 }}>{active.type === 'special' ? 'Special Collection' : active.type === 'live' ? 'Current Location' : 'Collection Point'}</div>
+            <div style={{ fontSize: 12, color: '#444', marginTop: 6 }}>{active.address || ''}</div>
+            {active.pointId && <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>ID: {String(active.pointId)}</div>}
+          </div>
+        </InfoWindow>
       )}
     </GoogleMap>
   ) : <p>Loading map...</p>;
