@@ -11,6 +11,7 @@ import CollectionHistory from './Pages/Collector/CollectionHistory.jsx';
 import RegisterStep1 from './Pages/Users/RegisterStep1.jsx';
 import EmailVerification from './Pages/Users/EmailVerification.jsx';
 import RegisterStep2 from './Pages/Users/RegisterStep2.jsx';
+import RegisterStep3 from './Pages/Users/RegisterStep3.jsx';
 import Login from './Pages/Users/Login.jsx';
 import UserProfile from './Pages/Users/UserProfile.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -35,6 +36,7 @@ function AppContent() {
         <Route path="/users/register/step1" element={<RegisterStep1 />} />
         <Route path="/users/register/verify" element={<EmailVerification />} />
         <Route path="/users/register/step2" element={<RegisterStep2 />} />
+        <Route path="/users/register/step3" element={<RegisterStep3 />} />
         <Route path="/users/login" element={<Login />} />
 
         {/* 🏠 Protected routes (login required) */}

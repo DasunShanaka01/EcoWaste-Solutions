@@ -2,12 +2,16 @@ package com.example.backend.controller;
 
 import com.example.backend.dto.RegisterStep1DTO;
 import com.example.backend.dto.RegisterStep2DTO;
+import com.example.backend.dto.RegisterStep3DTO;
+import com.example.backend.dto.WasteAccountResponseDTO;
 import com.example.backend.dto.LoginDTO;
 import com.example.backend.dto.EmailVerificationDTO;
 import com.example.backend.dto.UpdateProfileDTO;
 import com.example.backend.dto.ChangePasswordDTO;
 import com.example.backend.model.User;
+import com.example.backend.model.WasteAccount;
 import com.example.backend.service.AuthService;
+import com.example.backend.service.WasteAccountService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,6 +25,9 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
+    
+    @Autowired
+    private WasteAccountService wasteAccountService;
 
     // STEP 1 Registration
     @PostMapping("/register/step1")
@@ -59,6 +66,45 @@ public class AuthController {
     public User registerStep2(@PathVariable String userId,
             @RequestBody RegisterStep2DTO step2DTO) {
         return authService.completeRegistration(userId, step2DTO);
+    }
+
+    // STEP 3 Registration (Create waste account)
+    @PostMapping("/register/step3/{userId}")
+    public WasteAccountResponseDTO registerStep3(@PathVariable String userId,
+            @RequestBody RegisterStep3DTO step3DTO) {
+        // Verify user exists
+        User user = authService.findUserById(userId);
+        if (user == null) {
+            throw new RuntimeException("User not found");
+        }
+        
+        // Create location object
+        WasteAccount.Location location = new WasteAccount.Location(
+            step3DTO.getLatitude(),
+            step3DTO.getLongitude(),
+            step3DTO.getAddress(),
+            step3DTO.getCity(),
+            step3DTO.getCountry()
+        );
+        
+        // Create waste account
+        WasteAccount wasteAccount = wasteAccountService.createWasteAccount(userId, location);
+        
+        // Convert to response DTO
+        WasteAccountResponseDTO.LocationDTO locationDTO = new WasteAccountResponseDTO.LocationDTO(
+            wasteAccount.getLocation().getLatitude(),
+            wasteAccount.getLocation().getLongitude(),
+            wasteAccount.getLocation().getAddress(),
+            wasteAccount.getLocation().getCity(),
+            wasteAccount.getLocation().getCountry()
+        );
+        
+        return new WasteAccountResponseDTO(
+            wasteAccount.getAccountId(),
+            wasteAccount.getQrCode(),
+            locationDTO,
+            wasteAccount.getCreatedAt().toString()
+        );
     }
 
     // ✅ LOGIN (Return full user)
@@ -109,6 +155,28 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+    // Get user's waste account
+    @GetMapping("/waste-account/{userId}")
+    public WasteAccountResponseDTO getWasteAccount(@PathVariable String userId) {
+        WasteAccount wasteAccount = wasteAccountService.getWasteAccountByUserId(userId);
+        
+        // Convert to response DTO
+        WasteAccountResponseDTO.LocationDTO locationDTO = new WasteAccountResponseDTO.LocationDTO(
+            wasteAccount.getLocation().getLatitude(),
+            wasteAccount.getLocation().getLongitude(),
+            wasteAccount.getLocation().getAddress(),
+            wasteAccount.getLocation().getCity(),
+            wasteAccount.getLocation().getCountry()
+        );
+        
+        return new WasteAccountResponseDTO(
+            wasteAccount.getAccountId(),
+            wasteAccount.getQrCode(),
+            locationDTO,
+            wasteAccount.getCreatedAt().toString()
+        );
     }
 
     // Logout endpoint
