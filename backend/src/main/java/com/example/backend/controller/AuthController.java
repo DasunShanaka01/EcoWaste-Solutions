@@ -175,8 +175,32 @@ public class AuthController {
             wasteAccount.getAccountId(),
             wasteAccount.getQrCode(),
             locationDTO,
-            wasteAccount.getCreatedAt().toString()
+            wasteAccount.getCreatedAt() != null ? wasteAccount.getCreatedAt().toString() : "Unknown"
         );
+    }
+
+    // Get all waste accounts for collectors
+    @GetMapping("/waste-accounts")
+    public java.util.List<WasteAccountResponseDTO> getAllWasteAccounts() {
+        java.util.List<WasteAccount> wasteAccounts = wasteAccountService.getAllWasteAccounts();
+        return wasteAccounts.stream()
+            .map(account -> {
+                WasteAccountResponseDTO.LocationDTO locationDTO = new WasteAccountResponseDTO.LocationDTO(
+                    account.getLocation().getLatitude(),
+                    account.getLocation().getLongitude(),
+                    account.getLocation().getAddress(),
+                    account.getLocation().getCity(),
+                    account.getLocation().getCountry()
+                );
+                
+                return new WasteAccountResponseDTO(
+                    account.getAccountId(),
+                    account.getQrCode(),
+                    locationDTO,
+                    account.getCreatedAt() != null ? account.getCreatedAt().toString() : "Unknown"
+                );
+            })
+            .collect(java.util.stream.Collectors.toList());
     }
 
     // Logout endpoint

@@ -54,6 +54,10 @@ public class WasteAccountService {
         return wasteAccountRepository.existsByUserId(userId);
     }
     
+    public java.util.List<WasteAccount> getAllWasteAccounts() {
+        return wasteAccountRepository.findAll();
+    }
+    
     private String generateAccountId() {
         // Generate a unique account ID with prefix "WA" (Waste Account)
         String uuid = UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();

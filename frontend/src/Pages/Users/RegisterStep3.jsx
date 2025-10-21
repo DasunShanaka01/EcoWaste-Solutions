@@ -87,10 +87,7 @@ export default function RegisterStep3() {
         return;
       }
 
-      if (!location.address || !location.city || !location.country) {
-        setError("Please fill in all location details.");
-        return;
-      }
+       // Location details are now optional, only coordinates are required
 
       const wasteAccountData = await api.registerStep3(user.id, location);
       setWasteAccount(wasteAccountData);
@@ -146,10 +143,15 @@ export default function RegisterStep3() {
                     <span className="text-gray-600">Account ID:</span>
                     <span className="ml-2 font-medium">{wasteAccount.accountId}</span>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Location:</span>
-                    <span className="ml-2 font-medium">{wasteAccount.location.city}, {wasteAccount.location.country}</span>
-                  </div>
+                   <div>
+                     <span className="text-gray-600">Location:</span>
+                     <span className="ml-2 font-medium">
+                       {wasteAccount.location.city && wasteAccount.location.country 
+                         ? `${wasteAccount.location.city}, ${wasteAccount.location.country}`
+                         : wasteAccount.location.address || 'Location selected on map'
+                       }
+                     </span>
+                   </div>
                 </div>
               </div>
 
@@ -250,59 +252,66 @@ export default function RegisterStep3() {
                 </button>
               )}
 
-              {locationMethod === "manual" && (
-                <div className="border rounded-lg p-4">
-                  <Map onLocationSelect={handleMapClick} />
-                  <p className="text-sm text-gray-600 mt-2">Click on the map to select your location</p>
-                </div>
-              )}
+               {locationMethod === "manual" && (
+                 <div className="border rounded-lg p-4">
+                   <Map 
+                     onLocationSelect={handleMapClick} 
+                     selectedLocation={location}
+                   />
+                   <p className="text-sm text-gray-600 mt-2">
+                     Click on the map to select your location
+                     {location.latitude && location.longitude && (
+                       <span className="text-green-600 font-medium ml-2">
+                         ✓ Location selected: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                       </span>
+                     )}
+                   </p>
+                 </div>
+               )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-                  Address
-                </label>
-                <input
-                  id="address"
-                  type="text"
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
-                  placeholder="Enter your address"
-                  value={location.address}
-                  onChange={e => setLocation(prev => ({ ...prev, address: e.target.value }))}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
-                  City
-                </label>
-                <input
-                  id="city"
-                  type="text"
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
-                  placeholder="Enter your city"
-                  value={location.city}
-                  onChange={e => setLocation(prev => ({ ...prev, city: e.target.value }))}
-                />
-              </div>
-              
-              <div className="md:col-span-2">
-                <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
-                  Country
-                </label>
-                <input
-                  id="country"
-                  type="text"
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
-                  placeholder="Enter your country"
-                  value={location.country}
-                  onChange={e => setLocation(prev => ({ ...prev, country: e.target.value }))}
-                />
-              </div>
+               <div>
+                 <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+                   Address <span className="text-gray-500 text-sm">(Optional)</span>
+                 </label>
+                 <input
+                   id="address"
+                   type="text"
+                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
+                   placeholder="Enter your address"
+                   value={location.address}
+                   onChange={e => setLocation(prev => ({ ...prev, address: e.target.value }))}
+                 />
+               </div>
+               
+               <div>
+                 <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+                   City <span className="text-gray-500 text-sm">(Optional)</span>
+                 </label>
+                 <input
+                   id="city"
+                   type="text"
+                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
+                   placeholder="Enter your city"
+                   value={location.city}
+                   onChange={e => setLocation(prev => ({ ...prev, city: e.target.value }))}
+                 />
+               </div>
+               
+               <div className="md:col-span-2">
+                 <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
+                   Country <span className="text-gray-500 text-sm">(Optional)</span>
+                 </label>
+                 <input
+                   id="country"
+                   type="text"
+                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 outline-none"
+                   placeholder="Enter your country"
+                   value={location.country}
+                   onChange={e => setLocation(prev => ({ ...prev, country: e.target.value }))}
+                 />
+               </div>
             </div>
             
             <button

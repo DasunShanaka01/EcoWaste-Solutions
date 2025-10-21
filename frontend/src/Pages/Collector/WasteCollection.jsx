@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
-import scApi from '../../api/specialCollection';
 
 const WasteCollection = () => {
   const navigate = useNavigate();
@@ -44,112 +43,59 @@ const WasteCollection = () => {
 
   const [currentStop, setCurrentStop] = useState(null);
 
-  // Load waste submission locations from backend on mount
+  // Load waste account locations from backend on mount
   useEffect(() => {
-    const GEOCODE_KEY = "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk"; // same key used in Map.jsx
-
-    const geocodeAddress = async (address) => {
-      if (!address || address.trim() === '') return null;
-      try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GEOCODE_KEY}`;
-        const r = await fetch(url);
-        if (!r.ok) return null;
-        const j = await r.json();
-        if (j.status === 'OK' && Array.isArray(j.results) && j.results.length > 0) {
-          const loc = j.results[0].geometry.location;
-          return { lat: loc.lat, lng: loc.lng, formattedAddress: j.results[0].formatted_address };
-        }
-      } catch (err) {
-        // ignore geocode errors
-      }
-      return null;
-    };
 
     const fetchWasteLocations = async () => {
       try {
-        // fetch normal wastes
-        const res = await fetch('http://localhost:8081/api/waste/wastes', { credentials: 'include' });
+        // fetch waste accounts instead of waste reports and special collections
+        console.log('Fetching waste accounts from API...');
+        const res = await fetch('http://localhost:8081/api/auth/waste-accounts', { credentials: 'include' });
+        console.log('API response status:', res.status);
+        
         if (!res.ok) {
-          console.error('Failed fetching wastes', res.status);
+          console.error('Failed fetching waste accounts', res.status, res.statusText);
+          const errorText = await res.text();
+          console.error('Error response:', errorText);
+          return;
         }
-        const data = res.ok ? await res.json() : [];
+        
+        const data = await res.json();
+        console.log('Raw API response:', data);
 
-        const wastesList = Array.isArray(data) ? data : [];
-        setWastes(wastesList);
+        const wasteAccountsList = Array.isArray(data) ? data.filter(account => account.accountId != null) : [];
+        console.log('Processed waste accounts list:', wasteAccountsList);
+        setWastes(wasteAccountsList); // Keep using wastes state for compatibility
 
-        const normalMarkers = wastesList.map((w, idx) => {
-          const rawId = w.id || w._id || w._id || w.id;
-          const idStr = rawId && rawId.$oid ? rawId.$oid : (rawId ? String(rawId) : null);
-          const loc = w.location || null;
-          const latVal = loc && (loc.latitude ?? loc.lat ?? loc.latitude);
-          const lngVal = loc && (loc.longitude ?? loc.lng ?? loc.long ?? loc.longitud);
+        const accountMarkers = wasteAccountsList.map((account, idx) => {
+          const loc = account.location || null;
+          const latVal = loc && (loc.latitude ?? loc.lat);
+          const lngVal = loc && (loc.longitude ?? loc.lng);
           if (latVal != null && lngVal != null) {
             return {
               lat: Number(latVal),
               lng: Number(lngVal),
-              address: (loc && (loc.address || loc.addr)) || (w.pickup && w.pickup.address) || w.fullName || '',
-              pointId: idStr || idx,
-              type: 'normal',
-              // include status so Map component can color markers (e.g. 'Complete' or 'Pending')
-              status: w.status || w.state || (w.status === undefined ? null : String(w.status))
+              address: loc.address || '',
+              pointId: account.accountId || `account-${idx}`,
+              type: 'waste_account',
+              status: 'active' // All waste accounts are considered active
             };
           }
           return null;
         }).filter(Boolean);
 
-        // fetch special collections for this user (if any)
-        let specialMarkers = [];
-        try {
-          const specialList = await scApi.listMine();
-          if (Array.isArray(specialList) && specialList.length > 0) {
-            // geocode each location (best-effort, skip failures)
-            const geoPromises = specialList.map(async (sc, sidx) => {
-              // If the special collection already includes numeric coordinates, use them directly
-              // Common shapes: sc.lat & sc.lng, or sc.location = { lat, lng }
-              const latFromSc = sc && (sc.lat ?? (sc.location && (sc.location.lat ?? sc.location.latitude)) );
-              const lngFromSc = sc && (sc.lng ?? (sc.location && (sc.location.lng ?? sc.location.longitude)) );
-              if (latFromSc != null && lngFromSc != null) {
-                return {
-                  lat: Number(latFromSc),
-                  lng: Number(lngFromSc),
-                  address: (sc.address || (sc.location && sc.location.address)) || String(sc.location || sc.notes || '') || '',
-                  pointId: sc.id || sc.collectionId || `special-${sidx}`,
-                  type: 'special',
-                  status: sc.status || null
-                };
-              }
+        console.log('Waste accounts data:', wasteAccountsList);
+        console.log('Account markers:', accountMarkers);
 
-              // otherwise fall back to geocoding the textual location
-              const addr = typeof sc.location === 'string' ? sc.location : String(sc.location || '');
-              const geo = await geocodeAddress(addr);
-              if (geo) {
-                return {
-                  lat: Number(geo.lat),
-                  lng: Number(geo.lng),
-                  address: geo.formattedAddress || addr,
-                  pointId: sc.id || sc.collectionId || `special-${sidx}`,
-                  type: 'special',
-                  status: sc.status || null
-                };
-              }
-              return null;
-            });
-            const resolved = await Promise.all(geoPromises);
-            specialMarkers = resolved.filter(Boolean);
-          }
-        } catch (e) {
-          // listing special collections may fail if not authenticated; ignore
-        }
-
-        // compute stats from wastesList
-        const totalStops = wastesList.filter(w => w.location && (w.location.latitude != null || w.location.lat != null)).length;
-        const completed = wastesList.filter(w => String(w.status || '').toLowerCase() === 'complete').length;
-        const remaining = Math.max(0, totalStops - completed);
+        // compute stats from waste accounts
+        const totalStops = accountMarkers.length;
+        const completed = 0; // No completed status for waste accounts
+        const remaining = totalStops;
         setStats({ total: totalStops, completed, remaining });
 
-        setMarkers([...normalMarkers, ...specialMarkers]);
+        setMarkers(accountMarkers);
       } catch (e) {
-        console.error('Error loading waste locations', e);
+        console.error('Error loading waste account locations', e);
       }
     };
 
@@ -643,7 +589,7 @@ const WasteCollection = () => {
               {currentStep === 1 && (
                 <div>
                   <h2 className="text-2xl font-bold mb-2">Waste Collection Route</h2>
-                  <p className="text-gray-600 mb-8">Start your collection route and scan waste tags at each location</p>
+                  <p className="text-gray-600 mb-8">Start your collection route and visit waste account locations to collect waste</p>
 
                   <div className="mb-8">
                     <Map markers={markers} liveLocation={formData.location ? { lat: formData.location.latitude, lng: formData.location.longitude } : null} />
@@ -651,15 +597,15 @@ const WasteCollection = () => {
 
                   <div className="grid grid-cols-3 gap-4 mb-8">
                     <div className="bg-gray-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-gray-600 mb-1">Total Stops</p>
+                      <p className="text-sm text-gray-600 mb-1">Total Accounts</p>
                       <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-green-700 mb-1">Completed</p>
-                      <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+                    <div className="bg-blue-50 rounded-lg p-6 text-center">
+                      <p className="text-sm text-blue-700 mb-1">Active Accounts</p>
+                      <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
                     </div>
                     <div className="bg-yellow-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-yellow-700 mb-1">Remaining</p>
+                      <p className="text-sm text-yellow-700 mb-1">Available</p>
                       <p className="text-3xl font-bold text-yellow-600">{stats.remaining}</p>
                     </div>
                   </div>
@@ -672,7 +618,7 @@ const WasteCollection = () => {
                       <div>
                         <h3 className="font-semibold text-blue-900 mb-2">Ready to Start Collection</h3>
                         <p className="text-sm text-blue-800">
-                          Click the button below to begin your collection route. You will be asked to grant GPS permission for location tracking.
+                          Click the button below to begin your collection route. You will visit waste account locations to collect waste. GPS permission is required for location tracking.
                         </p>
                       </div>
                     </div>

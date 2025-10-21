@@ -11,7 +11,7 @@ const defaultCenter = {
   lng: 79.8612
 };
 
-const Map = ({ markers = [], path = [], liveLocation = null }) => {
+const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = null, selectedLocation = null }) => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk" // <-- PASTE YOUR API KEY HERE
@@ -31,8 +31,19 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
   const mapRef = useRef(null);
   const [active, setActive] = useState(null);
 
-  // The map should center on the live location if available
-  const mapCenter = liveLocation || (markers.length > 0 ? { lat: markers[0].lat, lng: markers[0].lng } : defaultCenter);
+  // Handle map click for location selection
+  const handleMapClick = useCallback((event) => {
+    if (onLocationSelect && event.latLng) {
+      const lat = event.latLng.lat();
+      const lng = event.latLng.lng();
+      onLocationSelect(lat, lng);
+    }
+  }, [onLocationSelect]);
+
+  // The map should center on the selected location, live location, or markers
+  const mapCenter = selectedLocation && selectedLocation.latitude && selectedLocation.longitude 
+    ? { lat: selectedLocation.latitude, lng: selectedLocation.longitude }
+    : liveLocation || (markers.length > 0 ? { lat: markers[0].lat, lng: markers[0].lng } : defaultCenter);
 
   const onLoad = useCallback((map) => {
     mapRef.current = map;
@@ -56,9 +67,26 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
         bounds.extend({ lat: liveLocation.lat, lng: liveLocation.lng });
         added = true;
       }
+      if (selectedLocation && selectedLocation.latitude && selectedLocation.longitude) {
+        bounds.extend({ lat: selectedLocation.latitude, lng: selectedLocation.longitude });
+        added = true;
+      }
 
       if (added) {
+        // Add padding to bounds to prevent excessive zooming
+        const padding = 0.01; // degrees
+        bounds.extend({ lat: bounds.getNorthEast().lat() + padding, lng: bounds.getNorthEast().lng() + padding });
+        bounds.extend({ lat: bounds.getSouthWest().lat() - padding, lng: bounds.getSouthWest().lng() - padding });
+        
         mapRef.current.fitBounds(bounds);
+        
+        // Set a maximum zoom level to prevent excessive zooming
+        const listener = window.google.maps.event.addListener(mapRef.current, 'bounds_changed', () => {
+          if (mapRef.current.getZoom() > 16) {
+            mapRef.current.setZoom(16);
+          }
+          window.google.maps.event.removeListener(listener);
+        });
       } else {
         // fallback center
         mapRef.current.setCenter(mapCenter);
@@ -68,7 +96,7 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
       // ignore errors during bounds calculation
       // console.warn('Could not fit bounds', e);
     }
-  }, [isLoaded, markers, liveLocation, mapCenter]);
+  }, [isLoaded, markers, liveLocation, selectedLocation, mapCenter]);
 
   if (loadError) {
     return <div>Map cannot be loaded right now, sorry.</div>;
@@ -78,8 +106,9 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
     <GoogleMap
       mapContainerStyle={containerStyle}
       center={mapCenter}
-      zoom={15} // initial zoom; will be adjusted by fitBounds if markers exist
+      zoom={13} // initial zoom; will be adjusted by fitBounds if markers exist
       onLoad={onLoad}
+      onClick={handleMapClick}
       options={{
         disableDefaultUI: true, // Optional: clean up the map UI
         zoomControl: true,
@@ -98,12 +127,14 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
       )}
       
       {/* Draw a marker for each collection point */}
-      {/* Draw a marker for each collection point */}
       {markers.map((marker, index) => {
+        const isWasteAccount = marker.type === 'waste_account';
         const isSpecial = marker.type === 'special';
-        // Determine color by type/status: special -> purple, completed -> green, pending/other -> red
+        // Determine color by type: waste_account -> blue, special -> purple, completed -> green, pending/other -> red
         const status = marker.status ? String(marker.status).toLowerCase() : null;
-        const iconUrl = isSpecial
+        const iconUrl = isWasteAccount
+          ? `http://maps.google.com/mapfiles/ms/icons/blue-dot.png`
+          : isSpecial
           ? `http://maps.google.com/mapfiles/ms/icons/purple-dot.png`
           : (status === 'complete'
             ? `http://maps.google.com/mapfiles/ms/icons/green-dot.png`
@@ -130,11 +161,38 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
         />
       )}
 
+      {/* Draw the selected location marker if it exists */}
+      {selectedLocation && selectedLocation.latitude && selectedLocation.longitude && (
+        <Marker 
+          position={{ lat: selectedLocation.latitude, lng: selectedLocation.longitude }}
+          icon={{
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: "#FF6B6B", // Red color for selected location
+            fillOpacity: 1,
+            strokeWeight: 3,
+            strokeColor: "white",
+          }}
+          title="Selected Location"
+          onClick={() => setActive({ 
+            lat: selectedLocation.latitude, 
+            lng: selectedLocation.longitude, 
+            address: selectedLocation.address || 'Selected Location', 
+            type: 'selected' 
+          })}
+        />
+      )}
+
       {/* InfoWindow for active marker */}
       {active && (
         <InfoWindow position={{ lat: active.lat, lng: active.lng }} onCloseClick={() => setActive(null)}>
           <div style={{ maxWidth: 220 }}>
-            <div style={{ fontWeight: 600 }}>{active.type === 'special' ? 'Special Collection' : active.type === 'live' ? 'Current Location' : 'Collection Point'}</div>
+            <div style={{ fontWeight: 600 }}>
+              {active.type === 'waste_account' ? 'Waste Account' : 
+               active.type === 'special' ? 'Special Collection' : 
+               active.type === 'live' ? 'Current Location' : 
+               active.type === 'selected' ? 'Selected Location' : 'Collection Point'}
+            </div>
             <div style={{ fontSize: 12, color: '#444', marginTop: 6 }}>{active.address || ''}</div>
             {active.pointId && <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>ID: {String(active.pointId)}</div>}
           </div>
