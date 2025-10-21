@@ -127,7 +127,9 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
       )}
       
       {/* Draw a marker for each collection point */}
-      {markers.map((marker, index) => {
+      {markers
+        .sort((a, b) => (b.capacity || 0) - (a.capacity || 0)) // Sort by capacity descending
+        .map((marker, index) => {
         const isWasteAccount = marker.type === 'waste_account';
         const isSpecial = marker.type === 'special';
         // Determine color by type: waste_account -> blue, special -> purple, completed -> green, pending/other -> red
@@ -195,6 +197,11 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
             </div>
             <div style={{ fontSize: 12, color: '#444', marginTop: 6 }}>{active.address || ''}</div>
             {active.pointId && <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>ID: {String(active.pointId)}</div>}
+            {active.capacity !== undefined && active.capacity !== null && (
+              <div style={{ fontSize: 11, color: '#2E7D32', marginTop: 6, fontWeight: 500 }}>
+                Capacity: {active.capacity.toFixed(1)}%
+              </div>
+            )}
           </div>
         </InfoWindow>
       )}

@@ -27,6 +27,9 @@ public class WasteAccount {
     
     @Field("is_active")
     private boolean isActive = true;
+    
+    @Field("capacity")
+    private double capacity = 0.0; // Capacity percentage (0.0 to 100.0)
 
     // Default constructor
     public WasteAccount() {
@@ -157,5 +160,13 @@ public class WasteAccount {
 
     public void setActive(boolean active) {
         isActive = active;
+    }
+
+    public double getCapacity() {
+        return capacity;
+    }
+
+    public void setCapacity(double capacity) {
+        this.capacity = capacity;
     }
 }

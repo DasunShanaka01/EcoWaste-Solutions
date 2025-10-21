@@ -103,7 +103,8 @@ public class AuthController {
             wasteAccount.getAccountId(),
             wasteAccount.getQrCode(),
             locationDTO,
-            wasteAccount.getCreatedAt().toString()
+            wasteAccount.getCreatedAt().toString(),
+            wasteAccount.getCapacity()
         );
     }
 
@@ -175,7 +176,8 @@ public class AuthController {
             wasteAccount.getAccountId(),
             wasteAccount.getQrCode(),
             locationDTO,
-            wasteAccount.getCreatedAt() != null ? wasteAccount.getCreatedAt().toString() : "Unknown"
+            wasteAccount.getCreatedAt() != null ? wasteAccount.getCreatedAt().toString() : "Unknown",
+            wasteAccount.getCapacity()
         );
     }
 
@@ -197,10 +199,43 @@ public class AuthController {
                     account.getAccountId(),
                     account.getQrCode(),
                     locationDTO,
-                    account.getCreatedAt() != null ? account.getCreatedAt().toString() : "Unknown"
+                    account.getCreatedAt() != null ? account.getCreatedAt().toString() : "Unknown",
+                    account.getCapacity()
                 );
             })
             .collect(java.util.stream.Collectors.toList());
+    }
+
+    // Auto-randomize capacity for waste accounts
+    @PostMapping("/waste-accounts/randomize-capacity")
+    public ResponseEntity<?> autoRandomizeCapacity(@RequestParam double percentage) {
+        try {
+            java.util.List<WasteAccount> updatedAccounts = wasteAccountService.autoRandomizeCapacity(percentage);
+            return ResponseEntity.ok().body("Successfully randomized capacity for " + updatedAccounts.size() + " waste accounts");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Scan waste account QR code
+    @PostMapping("/waste-accounts/scan-qr")
+    public ResponseEntity<?> scanWasteAccountQR(@RequestBody java.util.Map<String, String> request) {
+        try {
+            String qrData = request.get("qrData");
+            if (qrData == null || qrData.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("QR data is required");
+            }
+
+            // The QR code contains the accountId directly (generated in WasteAccountService)
+            String accountId = qrData.trim();
+            
+            // Get waste account details
+            java.util.Map<String, Object> accountDetails = wasteAccountService.getWasteAccountDetailsForScanning(accountId);
+            
+            return ResponseEntity.ok(accountDetails);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error scanning QR code: " + e.getMessage());
+        }
     }
 
     // Logout endpoint

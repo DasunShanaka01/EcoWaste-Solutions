@@ -5,6 +5,7 @@ public class WasteAccountResponseDTO {
     private String qrCode;
     private LocationDTO location;
     private String createdAt;
+    private double capacity;
 
     public WasteAccountResponseDTO() {
     }
@@ -14,6 +15,15 @@ public class WasteAccountResponseDTO {
         this.qrCode = qrCode;
         this.location = location;
         this.createdAt = createdAt;
+        this.capacity = 0.0;
+    }
+
+    public WasteAccountResponseDTO(String accountId, String qrCode, LocationDTO location, String createdAt, double capacity) {
+        this.accountId = accountId;
+        this.qrCode = qrCode;
+        this.location = location;
+        this.createdAt = createdAt;
+        this.capacity = capacity;
     }
 
     public static class LocationDTO {
@@ -105,5 +115,13 @@ public class WasteAccountResponseDTO {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public double getCapacity() {
+        return capacity;
+    }
+
+    public void setCapacity(double capacity) {
+        this.capacity = capacity;
     }
 }
