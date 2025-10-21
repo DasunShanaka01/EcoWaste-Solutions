@@ -17,6 +17,37 @@ export default function UserProfile() {
   const [editFormData, setEditFormData] = useState({});
   const [editCurrentStep, setEditCurrentStep] = useState(1);
   const [activeTab, setActiveTab] = useState('profile');
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedQRSubmission, setSelectedQRSubmission] = useState(null);
+  
+  // Helper function to safely render values (convert objects to strings)
+  const safeRender = (value) => {
+    if (value === null || value === undefined) return 'N/A';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
+  
+  // QR Code display functions
+  const handleShowQR = (submission) => {
+    setSelectedQRSubmission(submission);
+    setShowQRModal(true);
+  };
+  
+  const handleCloseQR = () => {
+    setShowQRModal(false);
+    setSelectedQRSubmission(null);
+  };
+  
+  const downloadQRCode = (submission) => {
+    if (submission.qrCodeBase64) {
+      const link = document.createElement('a');
+      link.href = `data:image/png;base64,${submission.qrCodeBase64}`;
+      link.download = `waste-qr-${submission.id}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
   
   // Form states
   const [formData, setFormData] = useState({
@@ -723,6 +754,17 @@ export default function UserProfile() {
                                   </svg>
                                 </div>
                               )}
+                              {submission.qrCodeBase64 && (
+                                <button
+                                  onClick={() => handleShowQR(submission)}
+                                  className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                                  title="View QR Code"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleDeleteWaste(submission.id)}
                                 className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
@@ -1141,6 +1183,102 @@ export default function UserProfile() {
                       Update Submission
                     </button>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && selectedQRSubmission && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">Waste Submission QR Code</h3>
+                <button
+                  onClick={handleCloseQR}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="text-center mb-6">
+                <p className="text-gray-600 text-sm mb-4">Scan this QR code to view waste details</p>
+                
+                {selectedQRSubmission.qrCodeBase64 ? (
+                  <div className="flex justify-center mb-6">
+                    <img
+                      src={`data:image/png;base64,${selectedQRSubmission.qrCodeBase64}`}
+                      alt={`QR Code for Waste ID: ${selectedQRSubmission.id}`}
+                      className="w-64 h-64 border border-gray-300 rounded-lg shadow-md"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <div className="text-gray-500">
+                      <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p>QR Code not available</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                  <h4 className="font-medium text-gray-800 mb-3">Waste Details</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">ID:</span>
+                      <span className="ml-2 font-medium">{safeRender(selectedQRSubmission.id)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Status:</span>
+                      <span className="ml-2 font-medium">{safeRender(selectedQRSubmission.status)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Method:</span>
+                      <span className="ml-2 font-medium">{safeRender(selectedQRSubmission.submissionMethod)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Weight:</span>
+                      <span className="ml-2 font-medium">{safeRender(selectedQRSubmission.totalWeightKg)} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Payback:</span>
+                      <span className="ml-2 font-medium text-green-600">LKR {safeRender(selectedQRSubmission.totalPaybackAmount)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Date:</span>
+                      <span className="ml-2 font-medium">
+                        {selectedQRSubmission.submissionDate ? new Date(selectedQRSubmission.submissionDate).toLocaleDateString() : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3 justify-center">
+                  {selectedQRSubmission.qrCodeBase64 && (
+                    <button
+                      onClick={() => downloadQRCode(selectedQRSubmission)}
+                      className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Download QR Code
+                    </button>
+                  )}
+                  <button
+                    onClick={handleCloseQR}
+                    className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             </div>
