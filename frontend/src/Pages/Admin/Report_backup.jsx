@@ -16,9 +16,6 @@ const Report = () => {
   const [loading, setLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState('actual'); // 'actual' or 'sample'
 
-  // Get current data based on preview mode
-  const currentData = reportPreview && previewMode === 'sample' ? reportPreview.sampleData : reportPreview?.actualData;
-
   const reportCategories = {
     'Waste Collection Analytics': {
       icon: '📊',
@@ -1275,6 +1272,14 @@ const Report = () => {
                   </div>
                 ) : reportPreview ? (
                   <div className="bg-white">
+                    {/* Get current data based on preview mode */}
+                    {(() => {
+                      const currentData = previewMode === 'sample' ? reportPreview.sampleData : reportPreview.actualData;
+                      const currentStats = currentData?.stats || {};
+                      const currentChartData = currentData?.chartData || [];
+                      
+                      return (
+                        <>
                     {/* Report Header Info */}
                     <div className="px-6 py-5 border-b border-gray-100">
                       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
@@ -1428,7 +1433,200 @@ const Report = () => {
                       </div>
                     )}
                     
+                    {/* Chart Visualization */}
+                    <div className="px-6 py-5 border-t border-gray-100">
+                      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-5 py-4 border-b border-gray-200">
+                          <h5 className="font-semibold text-gray-800 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {selectedTemplate?.chartType === 'line' ? 'Trend Analysis Chart' : 
+                             selectedTemplate?.chartType === 'pie' ? 'Distribution Analysis' :
+                             selectedTemplate?.chartType === 'donut' ? 'Status Overview' :
+                             selectedTemplate?.chartType === 'area' ? 'Volume Analysis' :
+                             selectedTemplate?.chartType === 'map' ? 'Route Map View' :
+                             selectedTemplate?.chartType === 'list' ? 'Route Connection List' :
+                             'Collection Data Analysis'}
+                          </h5>
+                          <p className="text-sm text-gray-600 mt-1">Visual representation of collection data</p>
+                        </div>
+                        
+                        <div className="p-5">
+                          <div className="relative h-48 bg-gradient-to-t from-gray-50 to-white rounded-lg border border-gray-100">
+                            <div className="flex items-end justify-around h-full p-4">
+                              {currentData?.chartData?.slice(0, 8).map((item, index) => {
+                                const maxValue = Math.max(...(currentData?.chartData?.map(d => d.value) || [0]));
+                                const height = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+                                return (
+                                  <div key={index} className="flex flex-col items-center group">
+                                    <div className="relative mb-2">
+                                      <div
+                                        className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg min-w-[24px] transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 shadow-sm"
+                                        style={{ height: `${Math.max(height, 5)}%` }}
+                                      ></div>
+                                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                                        {item.value}
+                                      </div>
+                                    </div>
+                                    <span className="text-xs text-gray-600 text-center leading-tight max-w-[60px] transform group-hover:text-blue-600 transition-colors">
+                                      {item.period?.length > 8 ? item.period.substring(0, 8) + '...' : item.period}
+                                    </span>
+                                  </div>
+                                );
+                              }) || []}
+                            </div>
+                            
+                            {/* Chart Grid Lines */}
+                            <div className="absolute inset-0 pointer-events-none">
+                              {[0, 25, 50, 75, 100].map((line) => (
+                                <div
+                                  key={line}
+                                  className="absolute left-0 right-0 border-t border-gray-200"
+                                  style={{ bottom: `${line}%` }}
+                                ></div>
+                              ))}
+                            </div>
+                            
+                            {/* Y-axis labels */}
+                            <div className="absolute left-0 top-0 bottom-0 -ml-12 flex flex-col justify-between text-xs text-gray-500 py-4">
+                              <span>{Math.max(...(currentData?.chartData?.map(d => d.value) || [0]))}</span>
+                              <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.75)}</span>
+                              <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.5)}</span>
+                              <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.25)}</span>
+                              <span>0</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
+                    {/* Detailed Analytics Section */}
+                    {selectedCategory === 'Waste Collection Analytics' && currentData?.data && (
+                      <div className="px-6 py-5 bg-gray-50 border-t border-gray-200">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          
+                          {/* Status Breakdown */}
+                          {currentData.data.statusBreakdown && (
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-5 py-4 border-b border-gray-200">
+                                <h6 className="font-semibold text-gray-800 flex items-center gap-2">
+                                  <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Status Distribution
+                                </h6>
+                                <p className="text-sm text-gray-600 mt-1">Collection status breakdown</p>
+                              </div>
+                              <div className="p-5">
+                                <div className="space-y-3">
+                                  {currentData?.data?.statusBreakdown ? Object.entries(currentData.data.statusBreakdown).map(([status, count]) => {
+                                    const total = Object.values(currentData.data.statusBreakdown).reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                                    const statusColors = {
+                                      'Completed': 'bg-green-500',
+                                      'Pending': 'bg-yellow-500',
+                                      'Processing': 'bg-blue-500',
+                                      'Cancelled': 'bg-red-500'
+                                    };
+                                    return (
+                                      <div key={status} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                          <div className={`w-3 h-3 rounded-full ${statusColors[status] || 'bg-gray-500'}`}></div>
+                                          <span className="font-medium text-gray-700">{status}</span>
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="font-bold text-gray-900">{count}</span>
+                                          <span className="text-sm text-gray-500 ml-2">({percentage}%)</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  }) : (
+                                    <div className="text-center text-gray-500 py-4">No status data available</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Recent Collections */}
+                          {currentData?.data?.recentCollections && (
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                              <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-4 border-b border-gray-200">
+                                <h6 className="font-semibold text-gray-800 flex items-center gap-2">
+                                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Recent Activity
+                                </h6>
+                                <p className="text-sm text-gray-600 mt-1">Latest collection entries</p>
+                              </div>
+                              <div className="p-5">
+                                <div className="space-y-3 max-h-64 overflow-y-auto">
+                                  {currentData?.data?.recentCollections?.slice(0, 5).map((collection, index) => (
+                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                          {collection.fullName?.charAt(0)?.toUpperCase() || '?'}
+                                        </div>
+                                        <div>
+                                          <p className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                                            {collection.fullName}
+                                          </p>
+                                          <p className="text-sm text-gray-500">{collection.status}</p>
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="font-semibold text-gray-900">{collection.totalWeight} kg</p>
+                                        <p className="text-sm font-medium text-green-600">${collection.totalPayback}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Actions */}
+                    {reportPreview.reportId && (
+                      <div className="px-6 py-5 bg-gradient-to-r from-gray-50 to-blue-50 border-t border-gray-200">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div>
+                            <h6 className="font-semibold text-gray-800 mb-1">Quick Actions</h6>
+                            <p className="text-sm text-gray-600">Additional report operations</p>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            <button 
+                              onClick={handleEmailReport}
+                              className="flex items-center gap-2 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 7.89a2 2 0 002.83 0L21 9M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              Email Report
+                            </button>
+                            <button 
+                              onClick={handleShareReport}
+                              className="flex items-center gap-2 bg-white hover:bg-purple-50 text-purple-700 border border-purple-200 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                              </svg>
+                              Share
+                            </button>
+                            <button 
+                              onClick={handlePrintReport}
+                              className="flex items-center gap-2 bg-white hover:bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                              </svg>
+                              Print
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Chart Visualization */}
                     <div className="px-6 py-5 border-t border-gray-100">
@@ -1635,7 +1833,10 @@ const Report = () => {
                           </button>
                         </div>
                       </div>
-                    </div>
+                    )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="bg-white py-16">

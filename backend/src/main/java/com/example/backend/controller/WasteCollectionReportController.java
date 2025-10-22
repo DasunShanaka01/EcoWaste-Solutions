@@ -3,6 +3,7 @@ package com.example.backend.controller;
 import com.example.backend.Admin.WasteCollectionReport;
 import com.example.backend.service.WasteCollectionReportService;
 import com.example.backend.service.ReportExportService;
+import com.example.backend.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,9 @@ public class WasteCollectionReportController {
 
     @Autowired
     private ReportExportService exportService;
+
+    @Autowired
+    private EmailService emailService;
 
     // Generate Monthly Collection Report
     @PostMapping("/generate/monthly-collection")
@@ -56,6 +60,126 @@ public class WasteCollectionReportController {
 
             WasteCollectionReport report = reportService.generateCollectionByRegionReport(parameters, format,
                     generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Generate Chart-based Reports
+    @PostMapping("/generate/bar-chart")
+    public ResponseEntity<WasteCollectionReport> generateBarChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "bar", generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/generate/pie-chart")
+    public ResponseEntity<WasteCollectionReport> generatePieChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "pie", generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/generate/line-chart")
+    public ResponseEntity<WasteCollectionReport> generateLineChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "line", generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/generate/donut-chart")
+    public ResponseEntity<WasteCollectionReport> generateDonutChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "donut", generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/generate/area-chart")
+    public ResponseEntity<WasteCollectionReport> generateAreaChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "area", generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/generate/map-chart")
+    public ResponseEntity<WasteCollectionReport> generateMapChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "map", generatedBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(report);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/generate/list-chart")
+    public ResponseEntity<WasteCollectionReport> generateListChartReport(
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) requestBody.get("parameters");
+            String chartType = (String) requestBody.get("chartType");
+            String generatedBy = (String) requestBody.get("generatedBy");
+
+            WasteCollectionReport report = reportService.generateChartBasedReport(parameters, "list", generatedBy);
             return ResponseEntity.status(HttpStatus.CREATED).body(report);
         } catch (Exception e) {
             e.printStackTrace();
@@ -105,6 +229,42 @@ public class WasteCollectionReportController {
             return ResponseEntity.noContent().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Send report via email
+    @PostMapping("/email")
+    public ResponseEntity<Map<String, String>> emailReport(@RequestBody Map<String, Object> requestBody) {
+        try {
+            String email = (String) requestBody.get("email");
+            String reportId = (String) requestBody.get("reportId");
+            String reportTitle = (String) requestBody.get("reportTitle");
+            String reportContent = (String) requestBody.get("reportContent");
+
+            if (email == null || email.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Email address is required"));
+            }
+
+            if (reportTitle == null || reportTitle.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Report title is required"));
+            }
+
+            // Generate report URL if reportId is provided
+            String reportUrl = reportId != null ? "http://localhost:3000/reports/" + reportId : null;
+
+            // Send email
+            emailService.sendReportEmail(email, reportTitle,
+                    reportContent != null ? reportContent : "Report details attached.",
+                    reportUrl);
+
+            return ResponseEntity.ok(Map.of("message", "Report sent successfully to " + email));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to send email: " + e.getMessage()));
         }
     }
 

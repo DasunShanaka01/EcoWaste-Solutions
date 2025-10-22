@@ -406,4 +406,236 @@ public class WasteCollectionReportService {
     public void deleteReport(String id) {
         reportRepository.deleteById(id);
     }
+
+    // Chart-based report generation
+    public WasteCollectionReport generateChartBasedReport(Map<String, Object> parameters, String chartType,
+            String generatedBy) {
+        String region = (String) parameters.get("region");
+        String department = (String) parameters.get("department");
+
+        // Get date range
+        LocalDateTime[] dateRangeArray = parseDateRange(parameters);
+        LocalDateTime startDate = dateRangeArray[0];
+        LocalDateTime endDate = dateRangeArray[1];
+
+        // Fetch waste data based on parameters
+        List<Waste> wasteData = getWasteDataByParameters(startDate, endDate, region, department);
+
+        // Generate analytics based on chart type
+        Map<String, Object> reportData = generateChartSpecificAnalytics(wasteData, chartType, startDate, endDate);
+
+        // Create report title based on chart type
+        String reportTitle = getChartTypeTitle(chartType) + " - " + formatDateRange(startDate, endDate);
+        if (region != null && !region.isEmpty()) {
+            reportTitle += " (" + region + " Region)";
+        }
+
+        // Save report
+        WasteCollectionReport report = new WasteCollectionReport(
+                chartType.substring(0, 1).toUpperCase() + chartType.substring(1) + " Chart",
+                reportTitle,
+                parameters,
+                reportData,
+                "PDF", // default format
+                generatedBy);
+
+        return reportRepository.save(report);
+    }
+
+    private Map<String, Object> generateChartSpecificAnalytics(List<Waste> wasteData, String chartType,
+            LocalDateTime startDate, LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        switch (chartType.toLowerCase()) {
+            case "bar":
+                return generateBarChartAnalytics(wasteData, startDate, endDate);
+            case "pie":
+                return generatePieChartAnalytics(wasteData, startDate, endDate);
+            case "line":
+                return generateLineChartAnalytics(wasteData, startDate, endDate);
+            case "donut":
+                return generateDonutChartAnalytics(wasteData, startDate, endDate);
+            case "area":
+                return generateAreaChartAnalytics(wasteData, startDate, endDate);
+            case "map":
+                return generateMapChartAnalytics(wasteData, startDate, endDate);
+            case "list":
+                return generateListChartAnalytics(wasteData, startDate, endDate);
+            default:
+                return generateBarChartAnalytics(wasteData, startDate, endDate);
+        }
+    }
+
+    private Map<String, Object> generateBarChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Group by waste category for bar chart (using item categories)
+        Map<String, Long> categoryBreakdown = wasteData.stream()
+                .flatMap(waste -> waste.getItems().stream())
+                .collect(Collectors.groupingBy(Waste.Item::getCategory, Collectors.counting()));
+
+        analytics.put("categoryBreakdown", categoryBreakdown);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "bar");
+
+        return analytics;
+    }
+
+    private Map<String, Object> generatePieChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Group by submission method for pie chart
+        Map<String, Long> sourceBreakdown = wasteData.stream()
+                .collect(Collectors.groupingBy(Waste::getSubmissionMethod, Collectors.counting()));
+
+        analytics.put("sourceBreakdown", sourceBreakdown);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "pie");
+
+        return analytics;
+    }
+
+    private Map<String, Object> generateLineChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Group by date for line chart trends
+        Map<String, Long> dailyBreakdown = wasteData.stream()
+                .collect(Collectors.groupingBy(
+                        waste -> waste.getSubmissionDate().toLocalDate().toString(),
+                        Collectors.counting()));
+
+        analytics.put("dailyBreakdown", dailyBreakdown);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "line");
+
+        return analytics;
+    }
+
+    private Map<String, Object> generateDonutChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Group by status for donut chart
+        Map<String, Long> statusBreakdown = wasteData.stream()
+                .collect(Collectors.groupingBy(Waste::getStatus, Collectors.counting()));
+
+        analytics.put("statusBreakdown", statusBreakdown);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "donut");
+
+        return analytics;
+    }
+
+    private Map<String, Object> generateAreaChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Group by date and item category for area chart
+        Map<String, Map<String, Long>> areaData = wasteData.stream()
+                .collect(Collectors.groupingBy(
+                        waste -> waste.getSubmissionDate().toLocalDate().toString(),
+                        Collectors.groupingBy(
+                                waste -> waste.getItems().isEmpty() ? "Unknown" : waste.getItems().get(0).getCategory(),
+                                Collectors.counting())));
+
+        analytics.put("areaData", areaData);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "area");
+
+        return analytics;
+    }
+
+    private Map<String, Object> generateMapChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Generate route data based on waste collection locations
+        List<Map<String, Object>> routeData = new ArrayList<>();
+        Map<String, List<Waste>> regionGroups = wasteData.stream()
+                .collect(Collectors.groupingBy(
+                        waste -> waste.getPickup() != null && waste.getPickup().getCity() != null
+                                ? waste.getPickup().getCity()
+                                : "Unknown"));
+
+        int routeId = 1;
+        for (Map.Entry<String, List<Waste>> entry : regionGroups.entrySet()) {
+            Map<String, Object> route = new HashMap<>();
+            route.put("id", routeId++);
+            route.put("name", "Route " + entry.getKey());
+            route.put("region", entry.getKey());
+            route.put("collections", entry.getValue().size());
+            route.put("status", "Active");
+            routeData.add(route);
+        }
+
+        analytics.put("routeData", routeData);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "map");
+        analytics.put("totalRoutes", routeData.size());
+
+        return analytics;
+    }
+
+    private Map<String, Object> generateListChartAnalytics(List<Waste> wasteData, LocalDateTime startDate,
+            LocalDateTime endDate) {
+        Map<String, Object> analytics = new HashMap<>();
+
+        // Generate connection data based on waste submissions
+        List<Map<String, Object>> connectionData = new ArrayList<>();
+        for (int i = 0; i < Math.min(wasteData.size(), 10); i++) {
+            Waste waste = wasteData.get(i);
+            Map<String, Object> connection = new HashMap<>();
+            connection.put("id", i + 1);
+            connection.put("from", waste.getPickup() != null && waste.getPickup().getCity() != null
+                    ? waste.getPickup().getCity()
+                    : "Collection Point " + (i + 1));
+            connection.put("to", "Processing Center");
+            connection.put("status", waste.getStatus());
+            connection.put("submissionMethod", waste.getSubmissionMethod());
+            connectionData.add(connection);
+        }
+
+        // Status breakdown
+        Map<String, Long> statusBreakdown = wasteData.stream()
+                .collect(Collectors.groupingBy(Waste::getStatus, Collectors.counting()));
+
+        analytics.put("connectionData", connectionData);
+        analytics.put("statusBreakdown", statusBreakdown);
+        analytics.put("totalCollections", wasteData.size());
+        analytics.put("dateRange", formatDateRange(startDate, endDate));
+        analytics.put("chartType", "list");
+        analytics.put("recentCollections", connectionData.subList(0, Math.min(5, connectionData.size())));
+
+        return analytics;
+    }
+
+    private String getChartTypeTitle(String chartType) {
+        switch (chartType.toLowerCase()) {
+            case "bar":
+                return "Waste Category Analysis";
+            case "pie":
+                return "Collection Source Distribution";
+            case "line":
+                return "Daily Collection Trends";
+            case "donut":
+                return "Collection Status Overview";
+            case "area":
+                return "Multi-Category Volume Analysis";
+            case "map":
+                return "Route Map Analysis";
+            case "list":
+                return "Route Connection Analysis";
+            default:
+                return "Waste Collection Analysis";
+        }
+    }
 }
