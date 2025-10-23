@@ -48,7 +48,10 @@ const WasteCollection = () => {
 
     const fetchWasteLocations = async () => {
       try {
-        // fetch waste accounts instead of waste reports and special collections
+        // First, auto-randomize capacity for waste accounts
+        await autoRandomizeCapacity(0.5); // Randomize 50% of accounts
+        
+        // Then fetch waste accounts
         console.log('Fetching waste accounts from API...');
         const res = await fetch('http://localhost:8081/api/auth/waste-accounts', { credentials: 'include' });
         console.log('API response status:', res.status);
@@ -169,6 +172,63 @@ const WasteCollection = () => {
     }
   };
 
+  // Process QR code data - moved outside handleScan to be accessible by other functions
+  const processQR = async (qrData) => {
+    try {
+      console.log('Processing QR data:', qrData);
+      
+      // Validate QR data format (should be account ID like WA123456789ABC)
+      if (!qrData || typeof qrData !== 'string') {
+        console.error('Invalid QR data format:', qrData);
+        setShowError(true);
+        setScanning(false);
+        return;
+      }
+      
+      // Check if it looks like a waste account ID
+      if (!qrData.startsWith('WA') || qrData.length < 10) {
+        console.warn('QR data does not appear to be a waste account ID:', qrData);
+        // Still try to process it in case it's valid
+      }
+      
+      // send to backend to parse and get waste account details
+      const res = await fetch('http://localhost:8081/api/auth/waste-accounts/scan-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ qrData: qrData.trim() })
+      });
+      
+      console.log('Backend response status:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Backend error:', res.status, errorText);
+        setShowError(true);
+        setScanning(false);
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('Backend response data:', json);
+      
+      setScanResult({ success: true, data: json });
+      // populate verify account form data
+      setFormData(prev => ({
+        ...prev,
+        tagId: json.accountId || prev.tagId,
+        accountHolder: json.userName || prev.accountHolder,
+        address: json.address || prev.address
+      }));
+      setCurrentStep(3);
+    } catch (e) {
+      console.error('Error processing QR', e);
+      setShowError(true);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const handleScan = () => {
     // Start webcam scanner (if supported) or fallback to simulated scan
     setScanning(true);
@@ -183,6 +243,7 @@ const WasteCollection = () => {
         // Use BarcodeDetector if available in the browser (guard via window to satisfy ESLint)
         const BarcodeDetectorClass = typeof window !== 'undefined' ? window.BarcodeDetector || null : null;
         if (BarcodeDetectorClass) {
+          console.log('BarcodeDetector is available, starting QR detection...');
           const formats = ['qr_code'];
           const detector = new BarcodeDetectorClass({ formats });
           scanLoopRef.current = setInterval(async () => {
@@ -190,15 +251,19 @@ const WasteCollection = () => {
               if (!videoRef.current) return;
               const results = await detector.detect(videoRef.current);
               if (results && results.length > 0) {
+                console.log('QR code detected:', results[0]);
                 const q = results[0].rawValue || results[0].displayValue || results[0].raw_text || results[0].rawData;
+                console.log('Extracted QR data:', q);
                 stopCamera();
                 processQR(q);
               }
             } catch (err) {
+              console.warn('QR detection error (continuing):', err);
               // ignore detection errors per loop
             }
           }, 800);
         } else {
+          console.warn('BarcodeDetector not available, falling back to manual entry');
           // No BarcodeDetector: provide user a manual paste fallback after 5s
           setTimeout(() => {
             setShowError(true);
@@ -221,38 +286,6 @@ const WasteCollection = () => {
       if (scanLoopRef.current) {
         clearInterval(scanLoopRef.current);
         scanLoopRef.current = null;
-      }
-    };
-
-    const processQR = async (qrData) => {
-      try {
-        // send to backend to parse and get waste account details
-        const res = await fetch('http://localhost:8081/api/auth/waste-accounts/scan-qr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ qrData })
-        });
-        if (!res.ok) {
-          setShowError(true);
-          setScanning(false);
-          return;
-        }
-        const json = await res.json();
-        setScanResult({ success: true, data: json });
-        // populate verify account form data
-        setFormData(prev => ({
-          ...prev,
-          tagId: json.accountId || prev.tagId,
-          accountHolder: json.userName || prev.accountHolder,
-          address: json.address || prev.address
-        }));
-        setCurrentStep(3);
-      } catch (e) {
-        console.error('Error processing QR', e);
-        setShowError(true);
-      } finally {
-        setScanning(false);
       }
     };
 
@@ -342,169 +375,116 @@ const WasteCollection = () => {
     setCurrentStep(5);
   };
 
-  const [randomizingCapacity, setRandomizingCapacity] = useState(false);
-
-  // Randomize capacity for waste accounts
-  const randomizeCapacity = async (percentage = 0.5) => {
+  // Auto-randomize capacity for waste accounts on page load
+  const autoRandomizeCapacity = async (percentage = 0.5) => {
     try {
-      setRandomizingCapacity(true);
       const res = await fetch(`http://localhost:8081/api/auth/waste-accounts/randomize-capacity?percentage=${percentage}`, {
         method: 'POST',
         credentials: 'include'
       });
       
       if (!res.ok) {
-        const errorText = await res.text();
-        alert('Failed to randomize capacity: ' + errorText);
+        console.warn('Failed to auto-randomize capacity:', res.status, res.statusText);
         return;
       }
       
-      const result = await res.text();
-      alert(result);
-      
-      // Refresh the waste accounts data
-      const fetchWasteLocations = async () => {
-        try {
-          const res = await fetch('http://localhost:8081/api/auth/waste-accounts', { credentials: 'include' });
-          if (!res.ok) return;
-          
-          const data = await res.json();
-          const wasteAccountsList = Array.isArray(data) ? data.filter(account => account.accountId != null) : [];
-          setWastes(wasteAccountsList);
-
-          const accountMarkers = wasteAccountsList.map((account, idx) => {
-            const loc = account.location || null;
-            const latVal = loc && (loc.latitude ?? loc.lat);
-            const lngVal = loc && (loc.longitude ?? loc.lng);
-            if (latVal != null && lngVal != null) {
-              return {
-                lat: Number(latVal),
-                lng: Number(lngVal),
-                address: loc.address || '',
-                pointId: account.accountId || `account-${idx}`,
-                type: 'waste_account',
-                status: 'active',
-                capacity: account.capacity || 0.0
-              };
-            }
-            return null;
-          }).filter(Boolean);
-
-          setMarkers(accountMarkers);
-        } catch (e) {
-          console.error('Error refreshing waste accounts', e);
-        }
-      };
-      
-      await fetchWasteLocations();
+      console.log('Capacity auto-randomized successfully');
     } catch (e) {
-      console.error('Error randomizing capacity', e);
-      alert('Error randomizing capacity');
-    } finally {
-      setRandomizingCapacity(false);
+      console.warn('Error auto-randomizing capacity:', e);
     }
   };
 
 
   const confirmCollection = async () => {
-    // Optimistically update stats
-    const newStats = {
-      total: stats.total,
-      completed: stats.completed + 1,
-      remaining: Math.max(0, stats.remaining - 1)
-    };
-    setStats(newStats);
-
-    const currentIndex = mockStops.findIndex(s => s.id === currentStop?.id);
-    const nextStop = currentIndex >= 0 ? (mockStops[currentIndex + 1] || null) : null;
-
-    // Helper to extract string id from waste record
-    const extractId = (w) => {
-      if (!w) return null;
-      if (typeof w === 'string') return w;
-      if (w._id && typeof w._id === 'string') return w._id;
-      if (w._id && w._id.$oid) return w._id.$oid;
-      if (w.id && typeof w.id === 'string') return w.id;
-      if (w.id && w.id.$oid) return w.id.$oid;
-      return null;
-    };
-
-    // Determine the id to update: prefer scanned wasteId, fallback to formData.tagId or matching wastes
-    let updateId = scanResult?.data?.wasteId || formData.tagId || null;
-    if (!updateId) {
-      // try to locate by matching the tag string in qrCodeBase64 or id fields
-      const tag = formData.tagId;
-      if (tag) {
-        const matched = wastes.find(w => (w.qrCodeBase64 && w.qrCodeBase64.includes(tag))) || wastes.find(w => {
-          const idStr = extractId(w);
-          return idStr && (idStr === tag || String(idStr) === String(tag));
-        });
-        updateId = extractId(matched);
-      }
-    }
-
     try {
-      if (!updateId) {
-        // nothing to update; still advance route/UI
-        if (nextStop) {
-          setCurrentStop(nextStop);
-          setCurrentStep(2);
-          setScanResult(null);
-          setShowError(false);
-          setShowManualEntry(false);
-          setFormData({
-            tagId: '',
-            accountHolder: '',
-            address: '',
-            weight: '',
-            wasteType: 'general',
-            manualWeight: false,
-            location: formData.location,
-            timestamp: null
-          });
-          captureLocation();
-        } else {
-          setCurrentStep(6);
-        }
-        return;
-      }
+      // Prepare collection data to save to database
+      const collectionData = {
+        accountId: formData.tagId,
+        accountHolder: formData.accountHolder,
+        address: formData.address,
+        weight: parseFloat(formData.weight) || 0,
+        wasteType: formData.wasteType,
+        location: formData.location,
+        timestamp: new Date().toISOString(),
+        collectorId: 'current_collector', // You might want to get this from user context
+        status: 'collected'
+      };
 
-      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(updateId)}/update`, {
-        method: 'PUT',
+      console.log('Saving collection data:', collectionData);
+
+      // Save collection data to database using new collection endpoint
+      const res = await fetch('http://localhost:8081/api/collections', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: 'Complete' })
+        body: JSON.stringify({
+          accountId: formData.tagId,
+          accountHolder: formData.accountHolder,
+          address: formData.address,
+          weight: parseFloat(formData.weight) || 0,
+          wasteType: formData.wasteType,
+          location: formData.location ? {
+            latitude: formData.location.latitude,
+            longitude: formData.location.longitude,
+            address: formData.address
+          } : null,
+          collectorId: 'current_collector' // You might want to get this from user context
+        })
       });
 
       if (!res.ok) {
-        console.error('Failed to mark waste complete', res.status);
-        alert('Failed to mark waste as complete on server');
-        // rollback stats
-        setStats(prev => ({ total: prev.total, completed: Math.max(0, prev.completed - 1), remaining: prev.remaining + 1 }));
+        const errorText = await res.text();
+        console.error('Failed to save collection data', res.status, errorText);
+        alert('Failed to save collection data. Please try again.');
         return;
       }
 
-      // Update local wastes array and scanResult
-      setWastes(prev => prev.map(w => {
-        const idStr = extractId(w);
-        if (idStr && String(idStr) === String(updateId)) {
-          return { ...w, status: 'Complete' };
-        }
-        return w;
-      }));
+      const response = await res.json();
+      console.log('Collection saved successfully:', response);
+      
+      if (!response.success) {
+        console.error('Collection save failed:', response.error);
+        alert('Failed to save collection data: ' + response.error);
+        return;
+      }
 
-      setScanResult(prev => prev ? ({ ...prev, data: { ...(prev.data || {}), status: 'Complete' } }) : prev );
+      // Update stats
+      const newStats = {
+        total: stats.total,
+        completed: stats.completed + 1,
+        remaining: Math.max(0, stats.remaining - 1)
+      };
+      setStats(newStats);
 
-      // Remove the corresponding marker from the map so the completed location no longer shows
-      setMarkers(prev => Array.isArray(prev) ? prev.filter(m => String(m.pointId) !== String(updateId)) : prev);
+      // Remove the collected marker from the map
+      setMarkers(prev => Array.isArray(prev) ? prev.filter(m => String(m.pointId) !== String(formData.tagId)) : prev);
 
-      // Collection completed successfully - redirect to dashboard
-      alert('Collection completed successfully!');
-      navigate('/collector/dashboard');
+      // Reset form data and return to route overview
+      setFormData({
+        tagId: '',
+        accountHolder: '',
+        address: '',
+        weight: '',
+        wasteType: 'general',
+        manualWeight: false,
+        location: formData.location, // Keep current location
+        timestamp: null
+      });
+
+      // Clear scan results and errors
+      setScanResult(null);
+      setShowError(false);
+      setShowManualEntry(false);
+
+      // Return to route overview (step 1)
+      setCurrentStep(1);
+      
+      // Show success message
+      alert('Collection completed successfully! Returning to route overview.');
+
     } catch (e) {
-      console.error('Failed to mark waste complete', e);
-      // rollback stats
-      setStats(prev => ({ total: prev.total, completed: Math.max(0, prev.completed - 1), remaining: prev.remaining + 1 }));
+      console.error('Error saving collection data', e);
+      alert('Error saving collection data. Please try again.');
     }
   };
 
@@ -585,45 +565,55 @@ const WasteCollection = () => {
               {currentStep === 1 && (
                 <div>
                   <h2 className="text-2xl font-bold mb-2">Waste Collection Route</h2>
-                  <p className="text-gray-600 mb-8">Start your collection route and visit waste account locations to collect waste</p>
+                  <p className="text-gray-600 mb-8">Start your collection route and visit waste bin locations to collect waste</p>
 
                   <div className="mb-8">
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold">Waste Account Locations</h3>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => randomizeCapacity(0.3)}
-                          disabled={randomizingCapacity}
-                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                        >
-                          {randomizingCapacity ? 'Randomizing...' : 'Randomize 30%'}
-                        </button>
-                        <button
-                          onClick={() => randomizeCapacity(0.5)}
-                          disabled={randomizingCapacity}
-                          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                        >
-                          {randomizingCapacity ? 'Randomizing...' : 'Randomize 50%'}
-                        </button>
-                        <button
-                          onClick={() => randomizeCapacity(0.8)}
-                          disabled={randomizingCapacity}
-                          className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                        >
-                          {randomizingCapacity ? 'Randomizing...' : 'Randomize 80%'}
-                        </button>
+                      <h3 className="text-lg font-semibold">Waste Bin Locations</h3>
+                      <div className="text-sm text-gray-600">
+                        Capacity automatically updated on page refresh
                       </div>
                     </div>
+                    
+                    {/* Priority Location Indicator */}
+                    {markers.length > 0 && (() => {
+                      // Sort markers by capacity descending (same logic as Map component)
+                      const sortedMarkers = [...markers].sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
+                      const highestCapacityMarker = sortedMarkers[0];
+                      console.log('WasteCollection - Sorted markers by capacity:', sortedMarkers.map(m => ({ id: m.pointId, capacity: m.capacity, address: m.address })));
+                      console.log('WasteCollection - Highest capacity marker:', highestCapacityMarker);
+                      
+                      return (
+                        <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                              <span className="text-white font-bold text-sm">1</span>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-orange-800">Priority Collection Point</span>
+                                <span className="px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded">HIGHEST CAPACITY</span>
+                              </div>
+                              <p className="text-sm text-orange-700 mt-1">
+                                {highestCapacityMarker?.address || 'Location details not available'} - 
+                                Capacity: {highestCapacityMarker?.capacity?.toFixed(1) || '0.0'}%
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    
                     <Map markers={markers} liveLocation={formData.location ? { lat: formData.location.latitude, lng: formData.location.longitude } : null} />
                   </div>
 
                   <div className="grid grid-cols-3 gap-4 mb-8">
                     <div className="bg-gray-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-gray-600 mb-1">Total Accounts</p>
+                      <p className="text-sm text-gray-600 mb-1">Total Bins</p>
                       <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-blue-700 mb-1">Active Accounts</p>
+                      <p className="text-sm text-blue-700 mb-1">Active Bins</p>
                       <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
                     </div>
                     <div className="bg-yellow-50 rounded-lg p-6 text-center">
@@ -640,7 +630,7 @@ const WasteCollection = () => {
                       <div>
                         <h3 className="font-semibold text-blue-900 mb-2">Ready to Start Collection</h3>
                         <p className="text-sm text-blue-800">
-                          Click the button below to begin your collection route. You will visit waste account locations to collect waste. GPS permission is required for location tracking.
+                          Click the button below to begin your collection route. You will visit waste bin locations to collect waste. GPS permission is required for location tracking.
                         </p>
                       </div>
                     </div>
@@ -651,8 +641,8 @@ const WasteCollection = () => {
               {/* Step 2: Scan Account Tag */}
               {currentStep === 2 && currentStop && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Scan Waste Account Tag</h2>
-                  <p className="text-gray-600 mb-8">Position the scanner near the waste account tag to read data</p>
+                  <h2 className="text-2xl font-bold mb-2">Scan Waste Bin Tag</h2>
+                  <p className="text-gray-600 mb-8">Position the scanner near the waste bin tag to read data</p>
 
                   <div className="mb-6">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -681,11 +671,22 @@ const WasteCollection = () => {
                         <svg className="w-24 h-24 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                         </svg>
-                        <p className="text-gray-600">Ready to scan waste account tag</p>
+                        <p className="text-gray-600">Ready to scan waste bin tag</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          QR codes should contain waste account IDs (e.g., WA123456789ABC)
+                        </p>
                       </div>
 
                       <div className="mb-4">
                         <video ref={videoRef} autoPlay muted playsInline className="w-full h-64 bg-black rounded" />
+                        {scanning && (
+                          <div className="mt-2 text-center">
+                            <div className="inline-flex items-center gap-2 text-sm text-blue-600">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              Scanning for QR codes...
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex justify-center">
@@ -702,7 +703,7 @@ const WasteCollection = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          {scanning ? 'Scanning Account Tag...' : 'Activate Scanner'}
+                          {scanning ? 'Scanning Bin Tag...' : 'Activate Scanner'}
                         </button>
                       </div>
                     </div>
@@ -806,7 +807,7 @@ const WasteCollection = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                           </div>
-                          <span className="font-semibold text-green-900 text-lg">Account Tag Scanned Successfully</span>
+                          <span className="font-semibold text-green-900 text-lg">Bin Tag Scanned Successfully</span>
                         </div>
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between py-2 border-b border-green-200">

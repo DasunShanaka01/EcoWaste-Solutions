@@ -127,13 +127,44 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
       )}
       
       {/* Draw a marker for each collection point */}
-      {markers
-        .sort((a, b) => (b.capacity || 0) - (a.capacity || 0)) // Sort by capacity descending
-        .map((marker, index) => {
+      {(() => {
+        // Create a sorted copy to avoid mutating the original array
+        const sortedMarkers = [...markers].sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
+        console.log('Map - Sorted markers by capacity:', sortedMarkers.map(m => ({ id: m.pointId, capacity: m.capacity, address: m.address })));
+        return sortedMarkers.map((marker, index) => {
         const isWasteAccount = marker.type === 'waste_account';
         const isSpecial = marker.type === 'special';
+        const isHighestCapacity = index === 0; // First marker after sorting has highest capacity
+        
         // Determine color by type: waste_account -> blue, special -> purple, completed -> green, pending/other -> red
         const status = marker.status ? String(marker.status).toLowerCase() : null;
+        
+        // Special styling for highest capacity marker
+        if (isHighestCapacity && isWasteAccount) {
+          return (
+            <Marker
+              key={marker.pointId || index}
+              position={{ lat: marker.lat, lng: marker.lng }}
+              label={{
+                text: "1",
+                color: "white",
+                fontWeight: "bold",
+                fontSize: "14px"
+              }}
+              icon={{
+                path: window.google.maps.SymbolPath.CIRCLE,
+                scale: 20, // Larger size for highest priority
+                fillColor: "#FF6B35", // Orange/red color for highest priority
+                fillOpacity: 1,
+                strokeWeight: 3,
+                strokeColor: "white",
+              }}
+              onClick={() => setActive({ ...marker, isHighestCapacity: true })}
+            />
+          );
+        }
+        
+        // Regular markers for other locations
         const iconUrl = isWasteAccount
           ? `http://maps.google.com/mapfiles/ms/icons/blue-dot.png`
           : isSpecial
@@ -146,12 +177,18 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
           <Marker
             key={marker.pointId || index}
             position={{ lat: marker.lat, lng: marker.lng }}
-            label={String(index + 1)}
+            label={{
+              text: String(index + 1),
+              color: "white",
+              fontWeight: "bold",
+              fontSize: "12px"
+            }}
             icon={{ url: iconUrl }}
             onClick={() => setActive(marker)}
           />
         );
-      })}
+      });
+      })()}
 
       {/* Draw the live location marker if it exists */}
       {liveLocation && (
@@ -189,7 +226,19 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
       {active && (
         <InfoWindow position={{ lat: active.lat, lng: active.lng }} onCloseClick={() => setActive(null)}>
           <div style={{ maxWidth: 220 }}>
-            <div style={{ fontWeight: 600 }}>
+            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {active.isHighestCapacity && (
+                <span style={{ 
+                  backgroundColor: '#FF6B35', 
+                  color: 'white', 
+                  padding: '2px 6px', 
+                  borderRadius: '4px', 
+                  fontSize: '10px',
+                  fontWeight: 'bold'
+                }}>
+                  PRIORITY
+                </span>
+              )}
               {active.type === 'waste_account' ? 'Waste Account' : 
                active.type === 'special' ? 'Special Collection' : 
                active.type === 'live' ? 'Current Location' : 
@@ -198,8 +247,28 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
             <div style={{ fontSize: 12, color: '#444', marginTop: 6 }}>{active.address || ''}</div>
             {active.pointId && <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>ID: {String(active.pointId)}</div>}
             {active.capacity !== undefined && active.capacity !== null && (
-              <div style={{ fontSize: 11, color: '#2E7D32', marginTop: 6, fontWeight: 500 }}>
+              <div style={{ 
+                fontSize: 11, 
+                color: active.isHighestCapacity ? '#FF6B35' : '#2E7D32', 
+                marginTop: 6, 
+                fontWeight: active.isHighestCapacity ? 'bold' : 500 
+              }}>
                 Capacity: {active.capacity.toFixed(1)}%
+                {active.isHighestCapacity && ' (HIGHEST)'}
+              </div>
+            )}
+            {active.isHighestCapacity && (
+              <div style={{ 
+                fontSize: 10, 
+                color: '#FF6B35', 
+                marginTop: 4, 
+                fontWeight: 'bold',
+                backgroundColor: '#FFF3E0',
+                padding: '4px 6px',
+                borderRadius: '4px',
+                border: '1px solid #FFE0B2'
+              }}>
+                🎯 Visit this location first!
               </div>
             )}
           </div>

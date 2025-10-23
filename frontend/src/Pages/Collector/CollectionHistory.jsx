@@ -16,7 +16,7 @@ const CollectionHistory = () => {
     const fetchCollectionHistory = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:8081/api/waste/collections', {
+        const response = await fetch('http://localhost:8081/api/collections', {
           method: 'GET',
           credentials: 'include',
           headers: {
@@ -29,6 +29,7 @@ const CollectionHistory = () => {
         }
 
         const data = await response.json();
+        console.log('Fetched collections:', data);
         setCollections(data);
       } catch (err) {
         console.error('Error fetching collection history:', err);
@@ -50,13 +51,13 @@ const CollectionHistory = () => {
     .sort((a, b) => {
       switch (sortBy) {
         case 'date':
-          return new Date(b.collectionDate || b.submissionDate) - new Date(a.collectionDate || a.submissionDate);
+          return new Date(b.collectionTimestamp || b.createdAt) - new Date(a.collectionTimestamp || a.createdAt);
         case 'status':
           return (a.status || '').localeCompare(b.status || '');
         case 'weight':
-          return (b.totalWeightKg || 0) - (a.totalWeightKg || 0);
+          return (b.weight || 0) - (a.weight || 0);
         case 'payback':
-          return (b.totalPaybackAmount || 0) - (a.totalPaybackAmount || 0);
+          return 0; // Collections don't have payback amounts
         default:
           return 0;
       }
@@ -64,6 +65,7 @@ const CollectionHistory = () => {
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
+      case 'collected':
       case 'complete':
         return 'bg-green-100 text-green-800';
       case 'pending':
@@ -143,7 +145,7 @@ const CollectionHistory = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center">
               <div className="p-2 bg-green-100 rounded-lg">
@@ -154,7 +156,7 @@ const CollectionHistory = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Completed</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {collections.filter(c => c.status?.toLowerCase() === 'complete').length}
+                  {collections.filter(c => c.status?.toLowerCase() === 'collected' || c.status?.toLowerCase() === 'complete').length}
                 </p>
               </div>
             </div>
@@ -186,7 +188,7 @@ const CollectionHistory = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Weight</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {collections.reduce((sum, c) => sum + (c.totalWeightKg || 0), 0).toFixed(1)} kg
+                  {collections.reduce((sum, c) => sum + (c.weight || 0), 0).toFixed(1)} kg
                 </p>
               </div>
             </div>
@@ -196,13 +198,14 @@ const CollectionHistory = () => {
             <div className="flex items-center">
               <div className="p-2 bg-purple-100 rounded-lg">
                 <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Payback</p>
+                <p className="text-sm font-medium text-gray-600">Total Collections</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  LKR {collections.reduce((sum, c) => sum + (c.totalPaybackAmount || 0), 0).toFixed(2)}
+                  {collections.length}
                 </p>
               </div>
             </div>
@@ -220,6 +223,7 @@ const CollectionHistory = () => {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <option value="all">All Statuses</option>
+                <option value="collected">Collected</option>
                 <option value="complete">Completed</option>
                 <option value="pending">Pending</option>
                 <option value="in_progress">In Progress</option>
@@ -236,7 +240,6 @@ const CollectionHistory = () => {
                 <option value="date">Collection Date</option>
                 <option value="status">Status</option>
                 <option value="weight">Weight</option>
-                <option value="payback">Payback Amount</option>
               </select>
             </div>
 
@@ -274,7 +277,7 @@ const CollectionHistory = () => {
                       Weight
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Payback
+                      Collector
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Collection Date
@@ -287,14 +290,14 @@ const CollectionHistory = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {collection.fullName || 'Unknown User'}
+                            {collection.accountHolder || 'Unknown Account Holder'}
                           </div>
                           <div className="text-sm text-gray-500">
-                            ID: {collection.id || collection._id || 'N/A'}
+                            Account ID: {collection.accountId || 'N/A'}
                           </div>
-                          {collection.pickup?.address && (
+                          {collection.address && (
                             <div className="text-xs text-gray-400 mt-1">
-                              📍 {collection.pickup.address}
+                              📍 {collection.address}
                             </div>
                           )}
                         </div>
@@ -305,16 +308,16 @@ const CollectionHistory = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getWasteTypeFromItems(collection.items)}
+                        {collection.wasteType || 'General Waste'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {collection.totalWeightKg ? `${collection.totalWeightKg} kg` : 'N/A'}
+                        {collection.weight ? `${collection.weight} kg` : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {collection.totalPaybackAmount ? `LKR ${collection.totalPaybackAmount.toFixed(2)}` : 'N/A'}
+                        {collection.collectorId || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(collection.collectionDate || collection.submissionDate)}
+                        {formatDate(collection.collectionTimestamp || collection.createdAt)}
                       </td>
                     </tr>
                   ))}
