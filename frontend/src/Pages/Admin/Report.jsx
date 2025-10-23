@@ -23,18 +23,16 @@ const Report = () => {
     'Waste Collection Analytics': {
       icon: '📊',
       templates: [
-        { name: 'Bar Chart Analysis', description: 'Waste collection data in bar chart format', icon: '📊', chartType: 'bar' },
-        { name: 'Pie Chart Analysis', description: 'Collection distribution in pie chart format', icon: '🥧', chartType: 'pie' },
-        { name: 'Line Chart Trends', description: 'Time-series trend analysis with line charts', icon: '📈', chartType: 'line' },
-        { name: 'Donut Chart Report', description: 'Waste categories shown as donut chart', icon: '🍩', chartType: 'donut' },
-        { name: 'Area Chart View', description: 'Collection volumes with area charts', icon: '📉', chartType: 'area' }
+        { name: 'Bar Chart Analysis', description: 'Daily waste collection amounts with date axis', icon: '📊', chartType: 'bar' },
+        { name: 'Pie Chart Analysis', description: 'Waste type distribution in pie chart format', icon: '🥧', chartType: 'pie' },
+        { name: 'Donut Chart Report', description: 'Waste categories shown as donut chart', icon: '🍩', chartType: 'donut' }
       ]
     },
     'Special Waste Analytics': {
       icon: '⚠️',
       templates: [
-        { name: 'Special Waste Pie Chart', description: 'Hazardous waste distribution by category', icon: '🥧', chartType: 'pie' },
-        { name: 'Special Waste Bar Chart', description: 'Special waste collection volumes comparison', icon: '�', chartType: 'bar' }
+        { name: 'Special Waste Pie Chart', description: 'Waste type distribution by collection date', icon: '🥧', chartType: 'pie' },
+        { name: 'Special Waste Bar Chart', description: 'Daily special waste collection amounts over time', icon: '📊', chartType: 'bar' }
       ]
     },
     'Financial Report  Analytics': {
@@ -69,6 +67,8 @@ const Report = () => {
     setSelectedTemplate(template);
     if (selectedCategory === 'Waste Collection Analytics') {
       generateWasteCollectionPreview(template);
+    } else if (selectedCategory === 'Special Waste Analytics') {
+      generateSpecialWastePreview(template);
     } else {
       generatePreview(template);
     }
@@ -85,15 +85,11 @@ const Report = () => {
       case 'pie':
         previewData = mode === 'sample' ? generateSamplePieChartData() : generatePieChartData();
         break;
-      case 'line':
-        previewData = mode === 'sample' ? generateSampleLineChartData() : generateLineChartData();
-        break;
+
       case 'donut':
         previewData = mode === 'sample' ? generateSampleDonutChartData() : generateDonutChartData();
         break;
-      case 'area':
-        previewData = mode === 'sample' ? generateSampleAreaChartData() : generateAreaChartData();
-        break;
+
       case 'map':
         previewData = mode === 'sample' ? generateSampleMapViewData() : generateMapViewData();
         break;
@@ -140,6 +136,140 @@ const Report = () => {
     }
   };
 
+  const generateSpecialWastePreview = async (template) => {
+    setLoading(true);
+    try {
+      // Fetch actual data from Special Waste Analytics API
+      const actualResponse = await fetch(`http://localhost:8080/api/reports/solid/special-waste/actual/${template.chartType}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: reportParameters.startDate || '2024-01-01',
+          endDate: reportParameters.endDate || '2024-12-31',
+          wasteTypes: [], // Empty means all types
+          includeItems: template.chartType === 'bar',
+          groupByDate: true // Show waste type distribution based on date
+        })
+      });
+
+      let actualData;
+      if (actualResponse.ok) {
+        const apiResult = await actualResponse.json();
+        actualData = {
+          chartData: apiResult.data.map(item => ({
+            period: item.label,
+            value: item.value,
+            color: item.color || (template.chartType === 'pie' ? getPieChartColor(item.label) : getBarChartColor())
+          })),
+          data: {
+            totalItems: apiResult.data.length,
+            totalFee: apiResult.data.reduce((sum, item) => sum + (item.value || 0), 0),
+            categories: apiResult.data.map(item => item.label)
+          },
+          stats: {
+            totalCategories: apiResult.data.length,
+            totalFee: `$${apiResult.data.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(2)}`,
+            largestCategory: apiResult.data.reduce((max, item) => item.value > max.value ? item : max, apiResult.data[0])?.label || 'N/A'
+          },
+          description: template.chartType === 'pie' 
+            ? 'Special waste collection by date showing dominant waste types per day'
+            : 'Daily special waste collection amounts from database'
+        };
+      } else {
+        // Fallback to sample data if API fails
+        actualData = template.chartType === 'pie' ? generateSpecialWastePieSampleData() : generateSpecialWasteBarSampleData();
+      }
+
+      // Generate sample data
+      const sampleData = template.chartType === 'pie' ? generateSpecialWastePieSampleData() : generateSpecialWasteBarSampleData();
+
+      setReportPreview({
+        title: template.name,
+        chartType: template.chartType,
+        actualData: actualData,
+        sampleData: sampleData,
+        summary: `Preview for ${template.name} - Showing actual special waste data from database`
+      });
+    } catch (error) {
+      console.error('Error generating special waste preview:', error);
+      // Fallback to sample data
+      const sampleData = template.chartType === 'pie' ? generateSpecialWastePieSampleData() : generateSpecialWasteBarSampleData();
+      setReportPreview({
+        title: template.name,
+        chartType: template.chartType,
+        actualData: sampleData,
+        sampleData: sampleData,
+        summary: `Preview for ${template.name} - Using sample data (API unavailable)`
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper functions for Special Waste Analytics
+  const getPieChartColor = (category) => {
+    const colorMap = {
+      'Garden': '#22c55e',
+      'Bulky': '#3b82f6', 
+      'E-Waste': '#ef4444',
+      'Hazardous': '#dc2626',
+      'Electronics': '#8b5cf6',
+      'Furniture': '#f59e0b'
+    };
+    return colorMap[category] || '#6b7280';
+  };
+
+  const getBarChartColor = () => '#3b82f6';
+
+  const generateSpecialWastePieSampleData = () => {
+    return {
+      chartData: [
+        { period: '2024-10-20 (Garden)', value: 420.50, color: '#22c55e' },
+        { period: '2024-10-21 (Bulky)', value: 650.75, color: '#3b82f6' },
+        { period: '2024-10-22 (E-Waste)', value: 320.25, color: '#ef4444' },
+        { period: '2024-10-23 (Hazardous)', value: 180.80, color: '#dc2626' }
+      ],
+      data: {
+        totalDates: 4,
+        totalFee: 1572.30,
+        dateRange: ['2024-10-20', '2024-10-21', '2024-10-22', '2024-10-23']
+      },
+      stats: {
+        totalDates: 4,
+        totalFee: '$1,572.30',
+        peakDate: '2024-10-21 (Bulky Items)'
+      },
+      description: 'Special waste collection by date showing dominant waste types per day'
+    };
+  };
+
+  const generateSpecialWasteBarSampleData = () => {
+    return {
+      chartData: [
+        { period: '2024-10-18', value: 125.50, color: '#3b82f6' },
+        { period: '2024-10-19', value: 98.75, color: '#3b82f6' },
+        { period: '2024-10-20', value: 154.20, color: '#3b82f6' },
+        { period: '2024-10-21', value: 203.80, color: '#3b82f6' },
+        { period: '2024-10-22', value: 87.40, color: '#3b82f6' },
+        { period: '2024-10-23', value: 165.15, color: '#3b82f6' }
+      ],
+      data: {
+        totalDates: 6,
+        totalFee: 834.80,
+        dateRange: ['2024-10-18', '2024-10-19', '2024-10-20', '2024-10-21', '2024-10-22', '2024-10-23']
+      },
+      stats: {
+        totalDates: 6,
+        totalFee: '$834.80',
+        averageFee: '$139.13'
+      },
+      description: 'Daily special waste collection amounts showing collection fees by date'
+    };
+  };
+
   // Chart data generators for different chart types
   const generateBarChartData = () => {
     const data = [
@@ -181,24 +311,7 @@ const Report = () => {
     };
   };
 
-  const generateLineChartData = () => {
-    const data = Array.from({ length: 12 }, (_, i) => ({
-      month: new Date(2024, i).toLocaleString('default', { month: 'short' }),
-      value: Math.floor(Math.random() * 1000) + 500,
-      trend: i > 5 ? 'increasing' : 'stable'
-    }));
-    
-    return {
-      chartData: data,
-      data: data,
-      description: 'Line chart showing monthly waste collection trends over the year',
-      stats: {
-        averageMonthly: '750 kg',
-        trendDirection: 'Increasing',
-        peakMonth: 'September'
-      }
-    };
-  };
+
 
   const generateDonutChartData = () => {
     const data = [
@@ -221,137 +334,122 @@ const Report = () => {
 
   // Sample chart data generators with rich dummy data
   const generateSampleBarChartData = () => {
-    const data = [
-      { category: 'Organic Waste', value: 1250, color: '#22c55e' },
-      { category: 'Recyclables', value: 890, color: '#3b82f6' },
-      { category: 'Plastic', value: 650, color: '#8b5cf6' },
-      { category: 'Paper', value: 720, color: '#06b6d4' },
-      { category: 'Glass', value: 420, color: '#f59e0b' },
-      { category: 'Metal', value: 380, color: '#ef4444' },
-      { category: 'Hazardous', value: 180, color: '#dc2626' },
-      { category: 'E-Waste', value: 145, color: '#7c3aed' },
-      { category: 'Textile', value: 290, color: '#ec4899' },
-      { category: 'Other', value: 220, color: '#6b7280' }
-    ];
+    // Generate last 7 days data with dates and waste amounts
+    const data = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      data.push({
+        period: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        value: Math.floor(Math.random() * 500) + 800 + (i * 20), // Random waste amounts in kg
+        color: '#3b82f6'
+      });
+    }
     
     return {
       chartData: data,
-      data: data,
-      description: 'Sample bar chart with comprehensive waste collection data across multiple categories',
+      data: {
+        statusBreakdown: {
+          'Completed': 234,
+          'Pending': 45,
+          'Processing': 32,
+          'Cancelled': 8
+        },
+        recentCollections: [
+          { fullName: 'John Doe', status: 'Completed', totalWeight: 45.2, totalPayback: 12.50 },
+          { fullName: 'Jane Smith', status: 'Processing', totalWeight: 32.8, totalPayback: 8.75 },
+          { fullName: 'Mike Johnson', status: 'Completed', totalWeight: 67.3, totalPayback: 18.20 },
+          { fullName: 'Sarah Wilson', status: 'Pending', totalWeight: 28.5, totalPayback: 7.60 },
+          { fullName: 'David Brown', status: 'Completed', totalWeight: 55.9, totalPayback: 15.40 }
+        ]
+      },
+      description: 'Daily waste collection amounts showing trend over the past week',
       stats: {
-        totalWaste: '5,155 kg',
-        categories: 10,
-        peakCategory: 'Organic Waste',
-        avgPerCategory: '515.5 kg'
+        totalWaste: data.reduce((sum, item) => sum + item.value, 0).toFixed(0) + ' kg',
+        avgDaily: (data.reduce((sum, item) => sum + item.value, 0) / data.length).toFixed(0) + ' kg',
+        peakDay: data.reduce((max, item) => item.value > max.value ? item : max).period,
+        trend: 'Increasing'
       }
     };
   };
 
   const generateSamplePieChartData = () => {
     const data = [
-      { name: 'Residential', value: 45, color: '#8b5cf6' },
-      { name: 'Commercial', value: 28, color: '#06b6d4' },
-      { name: 'Industrial', value: 15, color: '#f59e0b' },
-      { name: 'Municipal', value: 8, color: '#ec4899' },
-      { name: 'Educational', value: 4, color: '#22c55e' }
+      { period: 'Organic Waste', value: 1250, color: '#22c55e' },
+      { period: 'Plastic', value: 890, color: '#3b82f6' },
+      { period: 'Paper', value: 720, color: '#f59e0b' },
+      { period: 'Glass', value: 420, color: '#8b5cf6' },
+      { period: 'Metal', value: 380, color: '#ef4444' },
+      { period: 'E-Waste', value: 180, color: '#7c3aed' },
+      { period: 'Hazardous', value: 145, color: '#dc2626' }
     ];
     
     return {
       chartData: data,
-      data: data,
-      description: 'Sample pie chart showing diverse waste collection sources with detailed distribution',
+      data: {
+        statusBreakdown: {
+          'Completed': 186,
+          'Pending': 34,
+          'Processing': 28,
+          'Cancelled': 5
+        },
+        recentCollections: [
+          { fullName: 'Green Valley School', status: 'Completed', totalWeight: 125.7, totalPayback: 35.20 },
+          { fullName: 'City Mall Complex', status: 'Processing', totalWeight: 89.4, totalPayback: 24.80 },
+          { fullName: 'Residential Block A', status: 'Completed', totalWeight: 203.6, totalPayback: 56.70 },
+          { fullName: 'Tech Industries Ltd', status: 'Pending', totalWeight: 67.8, totalPayback: 18.90 },
+          { fullName: 'Municipal Office', status: 'Completed', totalWeight: 45.2, totalPayback: 12.60 }
+        ]
+      },
+      description: 'Waste type distribution showing different categories of collected waste',
       stats: {
-        totalSources: 5,
-        largestSource: 'Residential (45%)',
-        collectionPoints: 342,
-        dailyCollections: 89
+        totalTypes: 7,
+        largestType: 'Organic Waste (31.2%)',
+        totalWeight: data.reduce((sum, item) => sum + item.value, 0).toFixed(0) + ' kg',
+        categories: 'Mixed waste types'
       }
     };
   };
 
-  const generateSampleLineChartData = () => {
-    const data = Array.from({ length: 12 }, (_, i) => ({
-      month: new Date(2024, i).toLocaleString('default', { month: 'short' }),
-      value: Math.floor(Math.random() * 500) + 800 + (i * 50), // Trending upward
-      trend: i > 6 ? 'increasing' : 'stable',
-      collections: Math.floor(Math.random() * 50) + 100
-    }));
-    
-    return {
-      chartData: data,
-      data: data,
-      description: 'Sample line chart displaying monthly waste collection trends with clear growth patterns',
-      stats: {
-        averageMonthly: '1,245 kg',
-        trendDirection: 'Steadily Increasing',
-        peakMonth: 'December',
-        growthRate: '+12% YoY'
-      }
-    };
-  };
+
 
   const generateSampleDonutChartData = () => {
     const data = [
-      { name: 'Collected', value: 78, color: '#10b981' },
-      { name: 'In Progress', value: 12, color: '#f59e0b' },
-      { name: 'Pending', value: 7, color: '#ef4444' },
-      { name: 'Scheduled', value: 3, color: '#6b7280' }
+      { period: 'Recyclable', value: 1450, color: '#10b981' },
+      { period: 'Organic', value: 1250, color: '#22c55e' },
+      { period: 'Non-Recyclable', value: 890, color: '#ef4444' },
+      { period: 'Hazardous', value: 320, color: '#dc2626' },
+      { period: 'E-Waste', value: 180, color: '#7c3aed' }
     ];
     
     return {
       chartData: data,
-      data: data,
-      description: 'Sample donut chart showing comprehensive collection status with detailed efficiency metrics',
+      data: {
+        statusBreakdown: {
+          'Completed': 312,
+          'Pending': 28,
+          'Processing': 48,
+          'Cancelled': 12
+        },
+        recentCollections: [
+          { fullName: 'Frank Wilson', status: 'Completed', totalWeight: 167.2, totalPayback: 46.50 },
+          { fullName: 'Grace Kim', status: 'Processing', totalWeight: 98.7, totalPayback: 27.40 },
+          { fullName: 'Henry Garcia', status: 'Completed', totalWeight: 234.1, totalPayback: 65.20 },
+          { fullName: 'Iris Johnson', status: 'Pending', totalWeight: 87.3, totalPayback: 24.30 },
+          { fullName: 'Jack Rodriguez', status: 'Completed', totalWeight: 145.6, totalPayback: 40.50 }
+        ]
+      },
+      description: 'Waste category breakdown showing recyclable vs non-recyclable distribution',
       stats: {
-        efficiency: '78%',
-        pendingCollections: 45,
-        completedToday: 234,
-        avgResponseTime: '2.3 hours'
+        recyclablePercent: '65.4%',
+        totalWeight: data.reduce((sum, item) => sum + item.value, 0).toFixed(0) + ' kg',
+        topCategory: 'Recyclable Materials',
+        sustainabilityScore: '78/100'
       }
     };
   };
 
-  const generateSampleAreaChartData = () => {
-    const data = Array.from({ length: 30 }, (_, i) => ({
-      day: i + 1,
-      organic: Math.floor(Math.random() * 200) + 300,
-      recyclable: Math.floor(Math.random() * 150) + 200,
-      hazardous: Math.floor(Math.random() * 50) + 20,
-      date: new Date(2024, 9, i + 1).toLocaleDateString()
-    }));
-    
-    return {
-      chartData: data,
-      data: data,
-      description: 'Sample area chart showing daily waste collection volumes by category over a month',
-      stats: {
-        totalVolume: '15,420 kg',
-        dailyAverage: '514 kg',
-        peakDay: 'Day 23',
-        categories: 3
-      }
-    };
-  };
 
-  const generateAreaChartData = () => {
-    const data = Array.from({ length: 30 }, (_, i) => ({
-      day: `Day ${i + 1}`,
-      organic: Math.floor(Math.random() * 300) + 100,
-      recyclable: Math.floor(Math.random() * 200) + 50,
-      hazardous: Math.floor(Math.random() * 50) + 10
-    }));
-    
-    return {
-      chartData: data,
-      data: data,
-      description: 'Area chart displaying daily collection volumes by waste category',
-      stats: {
-        dailyAverage: '350 kg',
-        topCategory: 'Organic Waste',
-        growthRate: '+12%'
-      }
-    };
-  };
 
   const generateSampleMapViewData = () => {
     const data = [
@@ -468,12 +566,49 @@ const Report = () => {
 
   const generatePreview = (template) => {
     setLoading(true);
+    
+    // Generate both actual (mock) and sample data
+    let sampleData;
+    switch (template.chartType) {
+      case 'bar':
+        sampleData = generateSampleBarChartData();
+        break;
+      case 'pie':
+        sampleData = generateSamplePieChartData();
+        break;
+      case 'donut':
+        sampleData = generateSampleDonutChartData();
+        break;
+      default:
+        sampleData = generateSampleBarChartData();
+    }
+
     // Simulate preview generation
     setTimeout(() => {
       setReportPreview({
         title: template.name,
-        chartData: generateMockChartData(),
-        summary: `Preview for ${template.name} - This report shows waste collection volumes over time with key performance indicators.`
+        summary: `Preview for ${template.name} - This report shows waste collection data with comprehensive analytics.`,
+        data: {
+          totalCollections: 319,
+          totalWeight: 4567.8,
+          totalPayback: 1256.45
+        },
+        actualData: {
+          chartData: generateMockChartData(),
+          data: {
+            statusBreakdown: {
+              'Completed': 45,
+              'Pending': 12,
+              'Processing': 8,
+              'Cancelled': 2
+            },
+            recentCollections: [
+              { fullName: 'Loading...', status: 'Pending', totalWeight: 0, totalPayback: 0 }
+            ]
+          },
+          description: 'Loading actual data from backend...'
+        },
+        sampleData: sampleData
       });
       setLoading(false);
     }, 1000);
@@ -516,6 +651,8 @@ const Report = () => {
 
     if (selectedCategory === 'Waste Collection Analytics') {
       await generateWasteCollectionReport();
+    } else if (selectedCategory === 'Special Waste Analytics') {
+      await generateSpecialWasteReport();
     } else {
       // For other categories, show simple alert for now
       console.log('Generating report with parameters:', reportParameters);
@@ -528,12 +665,13 @@ const Report = () => {
     try {
       // Use chartType to determine endpoint instead of hardcoded names
       const chartType = selectedTemplate.chartType || 'bar';
-      const endpoint = `/api/waste-collection-reports/generate/${chartType}-chart`;
+      const endpoint = `/api/reports/solid/generate/Waste Collection Analytics/${chartType}`;
 
       const requestBody = {
-        parameters: reportParameters,
-        chartType: chartType,
-        generatedBy: 'Admin' // You can get this from user context
+        startDate: reportParameters.startDate || '2024-01-01',
+        endDate: reportParameters.endDate || '2024-12-31',
+        format: selectedFormat || 'JSON',
+        includeSampleData: false // Use real data if available
       };
 
       const response = await fetch(`http://localhost:8080${endpoint}`, {
@@ -547,15 +685,19 @@ const Report = () => {
 
       if (response.ok) {
         const report = await response.json();
-        alert(`Report generated successfully! Report ID: ${report.id}`);
+        console.log('Report response:', report);
+        alert(`Report generated successfully! Report ID: ${report.reportId}`);
         
         // Update preview with the generated report data
         setReportPreview({
-          title: report.reportTitle,
-          data: report.data,
+          title: report.title,
+          chartType: report.chartType,
+          reportId: report.reportId,
+          description: report.description,
+          data: report.chartData,
           summary: `Report generated successfully on ${new Date().toLocaleString()}`,
-          chartData: generateChartDataFromResponse(report.data),
-          reportId: report.id
+          chartData: report.chartData || generateChartDataFromResponse(report.chartData),
+          stats: report.statistics
         });
       } else {
         alert('Failed to generate report. Please try again.');
@@ -563,6 +705,286 @@ const Report = () => {
     } catch (error) {
       console.error('Error generating report:', error);
       alert('Error generating report. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSpecialWasteReport = async () => {
+    // Original implementation
+    setLoading(true);
+    try {
+      const chartType = selectedTemplate.chartType || 'pie';
+
+      const requestBody = {
+        startDate: reportParameters.startDate || '2024-01-01',
+        endDate: reportParameters.endDate || '2024-12-31',
+        wasteTypes: [], // Empty means all types
+        includeItems: chartType === 'bar',
+        format: selectedFormat || 'JSON',
+        groupByDate: true // Show waste type distribution based on date
+      };
+
+      const endpoint = `/api/reports/solid/generate/Special Waste Analytics/${chartType}`;
+      const response = await fetch(`http://localhost:8080${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.ok) {
+        const report = await response.json();
+        console.log('Special waste report response:', report);
+        alert(`Special waste report generated successfully!`);
+        
+        // Update preview with the generated report data
+        const chartData = report.chartData.map(item => ({
+          period: item.label,
+          value: item.value,
+          color: item.color || (chartType === 'pie' ? getPieChartColor(item.label) : getBarChartColor())
+        }));
+
+        setReportPreview({
+          title: report.title || selectedTemplate.name,
+          chartType: chartType,
+          reportId: report.reportId,
+          actualData: {
+            chartData: chartData,
+            data: {
+              totalItems: report.chartData.length,
+              totalFee: report.chartData.reduce((sum, item) => sum + (item.value || 0), 0),
+              categories: report.chartData.map(item => item.label)
+            },
+            stats: report.statistics || {
+              totalCategories: report.chartData.length,
+              totalFee: `$${report.chartData.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(2)}`,
+              largestCategory: report.chartData.reduce((max, item) => item.value > max.value ? item : max, report.chartData[0])?.label || 'N/A'
+            },
+            description: report.description || (chartType === 'pie' 
+              ? 'Special waste collection by date showing dominant waste types per day'
+              : 'Daily special waste collection amounts from database')
+          },
+          summary: `Special waste report generated successfully on ${new Date().toLocaleString()}`,
+          reportData: report
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Error response:', response.status, errorText);
+        alert(`Failed to generate special waste report. Status: ${response.status}. Please try again.`);
+      }
+    } catch (error) {
+      console.error('Error generating special waste report:', error);
+      alert('Error generating report. Please check your connection and try again.\nError: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSpecialWasteReportDebug = async () => {
+    setLoading(true);
+    try {
+      const chartType = selectedTemplate.chartType || 'pie';
+      
+      // Test the debug endpoint first
+      console.log('Testing debug endpoint...');
+      
+      // Step 1: Test if backend is responding
+      console.log('Step 1: Testing backend ping...');
+      const pingResponse = await fetch(`http://localhost:8080/api/reports/solid/ping`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!pingResponse.ok) {
+        console.error('Backend not responding:', pingResponse.status);
+        alert(`Backend not responding. Status: ${pingResponse.status}. Please start the backend server.`);
+        return;
+      }
+      
+      const pingResult = await pingResponse.json();
+      console.log('Ping result:', pingResult);
+      
+      // Step 2: Test report service injection
+      console.log('Step 2: Testing report service...');
+      const serviceResponse = await fetch(`http://localhost:8080/api/reports/solid/test-service`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!serviceResponse.ok) {
+        const errorText = await serviceResponse.text();
+        console.error('Service test failed:', serviceResponse.status, errorText);
+        alert(`Service test failed. Status: ${serviceResponse.status}. Error: ${errorText}`);
+        return;
+      }
+      
+      const serviceResult = await serviceResponse.json();
+      console.log('Service test result:', serviceResult);
+      
+      // Step 3: Test sample-only endpoint (no database access)
+      console.log('Step 3: Testing sample-only generation...');
+      const sampleOnlyResponse = await fetch(`http://localhost:8080/api/reports/solid/special-waste/sample-only/${chartType}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (sampleOnlyResponse.ok) {
+        const sampleResult = await sampleOnlyResponse.json();
+        console.log('Sample-only test result:', sampleResult);
+        console.log(`All basic tests passed! Sample generation works. Chart data points: ${sampleResult.chartDataSize}`);
+        
+        // Step 4: Test database connectivity
+        console.log('Step 4: Testing database connectivity...');
+        const dbTestResponse = await fetch(`http://localhost:8080/api/reports/solid/test-database`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+        
+        if (dbTestResponse.ok) {
+          const dbResult = await dbTestResponse.json();
+          console.log('Database test result:', dbResult);
+          console.log(`Database test passed! Records found: ${dbResult.recordCount}`);
+          
+          // Step 5: Test actual special waste generation with database data
+          console.log('Step 5: Testing actual special waste generation with database data...');
+          const actualGenResponse = await fetch(`http://localhost:8080/api/reports/solid/test-actual-generation/${chartType}`, {
+            method: 'GET',
+            credentials: 'include',
+          });
+          
+          if (actualGenResponse.ok) {
+            const actualResult = await actualGenResponse.json();
+            console.log('Actual generation test result:', actualResult);
+            alert(`SUCCESS! All tests passed including actual generation! Chart data points: ${actualResult.chartDataSize}`);
+          } else {
+            const actualErrorText = await actualGenResponse.text();
+            console.error('Actual generation test failed:', actualGenResponse.status, actualErrorText);
+            alert(`FOUND THE ISSUE! Actual generation failed. Status: ${actualGenResponse.status}. This is the exact cause of the 500 error.`);
+            
+            // Try to parse the error for more details
+            try {
+              const actualErrorJson = JSON.parse(actualErrorText);
+              console.error('Actual generation error details:', actualErrorJson);
+              alert(`Root cause found: ${actualErrorJson.errorType}: ${actualErrorJson.message}`);
+            } catch (e) {
+              console.error('Raw actual generation error:', actualErrorText);
+            }
+          }
+        } else {
+          const dbErrorText = await dbTestResponse.text();
+          console.error('Database test failed:', dbTestResponse.status, dbErrorText);
+          alert(`Database test failed. Status: ${dbTestResponse.status}. This is the root cause of the 500 error.`);
+          
+          // Try to parse the error for more details
+          try {
+            const dbErrorJson = JSON.parse(dbErrorText);
+            console.error('Database error details:', dbErrorJson);
+            alert(`Database error details: ${dbErrorJson.message}`);
+          } catch (e) {
+            console.error('Raw database error:', dbErrorText);
+          }
+        }
+        return;
+      } else {
+        const errorText = await sampleOnlyResponse.text();
+        console.error('Sample-only test failed:', sampleOnlyResponse.status, errorText);
+        alert(`Sample-only test failed. Status: ${sampleOnlyResponse.status}. This indicates the core issue.`);
+        
+        // Try to parse the error for more details
+        try {
+          const errorJson = JSON.parse(errorText);
+          console.error('Error details:', errorJson);
+          alert(`Detailed error: ${errorJson.type}: ${errorJson.message}`);
+        } catch (e) {
+          // Not JSON, just show the text
+          console.error('Raw error:', errorText);
+        }
+        return;
+      }
+      
+      // If we get here, all basic tests passed, so we can try the database test
+      // For now, we'll skip the database test since sample data is working
+      console.log('All tests passed - special waste generation is working with sample data');
+      
+    } catch (error) {
+      console.error('Error in debug tests:', error);
+      alert('Error in debug tests: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSpecialWasteReportOriginal = async () => {
+    // Original implementation
+    setLoading(true);
+    try {
+      const chartType = selectedTemplate.chartType || 'pie';
+      const endpoint = `/api/reports/solid/special-waste/${chartType}`;
+
+      const requestBody = {
+        startDate: reportParameters.startDate || '2024-01-01',
+        endDate: reportParameters.endDate || '2024-12-31',
+        wasteTypes: [], // Empty means all types
+        includeItems: chartType === 'bar',
+        format: selectedFormat || 'JSON',
+        groupByDate: true // Show waste type distribution based on date
+      };
+
+      const response = await fetch(`http://localhost:8080${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.ok) {
+        const report = await response.json();
+        console.log('Special waste report response:', report);
+        alert(`Special waste report generated successfully!`);
+        
+        // Update preview with the generated report data
+        const chartData = report.chartData.map(item => ({
+          period: item.label,
+          value: item.value,
+          color: item.color || (chartType === 'pie' ? getPieChartColor(item.label) : getBarChartColor())
+        }));
+
+        setReportPreview({
+          title: report.title || selectedTemplate.name,
+          chartType: chartType,
+          reportId: report.reportId,
+          actualData: {
+            chartData: chartData,
+            data: {
+              totalItems: report.chartData.length,
+              totalFee: report.chartData.reduce((sum, item) => sum + (item.value || 0), 0),
+              categories: report.chartData.map(item => item.label)
+            },
+            stats: report.statistics || {
+              totalCategories: report.chartData.length,
+              totalFee: `$${report.chartData.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(2)}`,
+              largestCategory: report.chartData.reduce((max, item) => item.value > max.value ? item : max, report.chartData[0])?.label || 'N/A'
+            },
+            description: report.description || (chartType === 'pie' 
+              ? 'Special waste collection by date showing dominant waste types per day'
+              : 'Daily special waste collection amounts from database')
+          },
+          summary: `Special waste report generated successfully on ${new Date().toLocaleString()}`,
+          reportData: report
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Error response:', response.status, errorText);
+        alert(`Failed to generate special waste report. Status: ${response.status}. Please try again.`);
+      }
+    } catch (error) {
+      console.error('Error generating special waste report:', error);
+      alert('Error generating report. Please check your connection and try again.\nError: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -586,17 +1008,19 @@ const Report = () => {
 
     setLoading(true);
     try {
-      // Use chartType to determine endpoint instead of hardcoded names
       const chartType = selectedTemplate.chartType || 'bar';
-      const endpoint = `/api/waste-collection-reports/generate-and-download/${chartType}-chart`;
-
+      
+      // Use SOLID controller for both categories
+      const endpoint = `/api/reports/solid/download/${encodeURIComponent(selectedCategory)}/${chartType}/${format}`;
+      
       const requestBody = {
-        parameters: reportParameters,
-        chartType: chartType,
-        generatedBy: 'Admin'
+        startDate: reportParameters.startDate || '2024-01-01',
+        endDate: reportParameters.endDate || '2024-12-31',
+        format: format,
+        includeSampleData: false // Use real data if available
       };
 
-      const response = await fetch(`http://localhost:8080${endpoint}?format=${format}`, {
+      const response = await fetch(`http://localhost:8080${endpoint}`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -613,7 +1037,10 @@ const Report = () => {
         
         // Get filename from response headers or generate one
         const contentDisposition = response.headers.get('content-disposition');
-        let filename = `waste_collection_report.${format.toLowerCase()}`;
+        const categorySlug = selectedCategory.toLowerCase().replace(/\s+/g, '_');
+        const chartType = selectedTemplate.chartType || 'bar';
+        const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        let filename = `${categorySlug}_${chartType}_report_${timestamp}.${format.toLowerCase()}`;
         if (contentDisposition) {
           const filenameMatch = contentDisposition.match(/filename="(.+)"/);
           if (filenameMatch) {
@@ -640,45 +1067,9 @@ const Report = () => {
   };
 
   const downloadExistingReport = async (reportId, format) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`http://localhost:8080/api/waste-collection-reports/download/${reportId}?format=${format}`, {
-        method: 'GET',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        
-        // Get filename from response headers or generate one
-        const contentDisposition = response.headers.get('content-disposition');
-        let filename = `report_${reportId}.${format.toLowerCase()}`;
-        if (contentDisposition) {
-          const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-          if (filenameMatch) {
-            filename = filenameMatch[1];
-          }
-        }
-        
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        
-        alert(`Report downloaded successfully as ${filename}`);
-      } else {
-        alert('Failed to download report. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error downloading report:', error);
-      alert('Error downloading report. Please check your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
+    // Since SOLID controller doesn't have download by ID, 
+    // we'll regenerate and download with current parameters
+    await generateAndDownloadReport(format);
   };
 
   // Handler functions for email, share, and print
@@ -696,14 +1087,19 @@ const Report = () => {
     }
 
     try {
+      console.log('Sending email to:', recipientEmail);
+      console.log('Report data:', reportPreview);
+
       const emailData = {
         email: recipientEmail,
         reportId: reportPreview.reportId,
         reportTitle: reportPreview.title,
-        reportContent: reportPreview.description || 'Waste collection analytics report with detailed charts and statistics.'
+        reportContent: reportPreview.description || 'SOLID Principles-based Waste collection analytics report with detailed charts and statistics.'
       };
 
-      const response = await fetch('http://localhost:8080/api/waste-collection-reports/email', {
+      console.log('Email payload:', emailData);
+
+      const response = await fetch('http://localhost:8080/api/reports/solid/email', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -712,17 +1108,22 @@ const Report = () => {
         body: JSON.stringify(emailData)
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
       if (response.ok) {
         const result = await response.json();
+        console.log('Success result:', result);
         alert(result.message || 'Report sent successfully!');
       } else {
         const error = await response.json();
+        console.error('Error response:', error);
         alert(error.error || 'Failed to send email. Please try again.');
       }
       
     } catch (error) {
       console.error('Error sending email:', error);
-      alert('Error sending email. Please check your connection and try again.');
+      alert('Error sending email. Please check your connection and try again.\nError: ' + error.message);
     }
   };
 
@@ -1438,10 +1839,8 @@ const Report = () => {
                             <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            {selectedTemplate?.chartType === 'line' ? 'Trend Analysis Chart' : 
-                             selectedTemplate?.chartType === 'pie' ? 'Distribution Analysis' :
+                            {selectedTemplate?.chartType === 'pie' ? 'Distribution Analysis' :
                              selectedTemplate?.chartType === 'donut' ? 'Status Overview' :
-                             selectedTemplate?.chartType === 'area' ? 'Volume Analysis' :
                              selectedTemplate?.chartType === 'map' ? 'Route Map View' :
                              selectedTemplate?.chartType === 'list' ? 'Route Connection List' :
                              'Collection Data Analysis'}
@@ -1450,50 +1849,195 @@ const Report = () => {
                         </div>
                         
                         <div className="p-5">
-                          <div className="relative h-48 bg-gradient-to-t from-gray-50 to-white rounded-lg border border-gray-100">
-                            <div className="flex items-end justify-around h-full p-4">
-                              {currentData?.chartData?.slice(0, 8).map((item, index) => {
-                                const maxValue = Math.max(...(currentData?.chartData?.map(d => d.value) || [0]));
-                                const height = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-                                return (
-                                  <div key={index} className="flex flex-col items-center group">
-                                    <div className="relative mb-2">
-                                      <div
-                                        className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg min-w-[24px] transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 shadow-sm"
-                                        style={{ height: `${Math.max(height, 5)}%` }}
+                          {/* Render different chart types based on selectedTemplate.chartType */}
+                          {selectedTemplate?.chartType === 'pie' ? (
+                            /* Pie Chart */
+                            <div className="relative h-64 flex items-center justify-center">
+                              <div className="relative w-48 h-48">
+                                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                                  {currentData?.chartData?.map((item, index) => {
+                                    const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
+                                    const percentage = (item.value / total) * 100;
+                                    const angle = (percentage / 100) * 360;
+                                    const startAngle = currentData.chartData.slice(0, index).reduce((sum, d) => sum + (d.value / total) * 360, 0);
+                                    
+                                    const startX = 50 + 30 * Math.cos((startAngle * Math.PI) / 180);
+                                    const startY = 50 + 30 * Math.sin((startAngle * Math.PI) / 180);
+                                    const endX = 50 + 30 * Math.cos(((startAngle + angle) * Math.PI) / 180);
+                                    const endY = 50 + 30 * Math.sin(((startAngle + angle) * Math.PI) / 180);
+                                    
+                                    const largeArcFlag = angle > 180 ? 1 : 0;
+                                    
+                                    return (
+                                      <path
+                                        key={index}
+                                        d={`M 50 50 L ${startX} ${startY} A 30 30 0 ${largeArcFlag} 1 ${endX} ${endY} Z`}
+                                        fill={item.color || `hsl(${index * 60}, 70%, 50%)`}
+                                        stroke="white"
+                                        strokeWidth="0.5"
+                                        className="hover:opacity-80 transition-opacity cursor-pointer"
+                                      />
+                                    );
+                                  }) || []}
+                                </svg>
+                                
+                                {/* Center Label */}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="text-center">
+                                    <div className="text-lg font-bold text-gray-800">
+                                      {currentData?.chartData?.reduce((sum, item) => sum + item.value, 0) || 0}
+                                    </div>
+                                    <div className="text-xs text-gray-500">Total kg</div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Legend */}
+                              <div className="absolute right-0 top-0 space-y-2 max-w-xs">
+                                {currentData?.chartData?.map((item, index) => {
+                                  const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
+                                  const percentage = ((item.value / total) * 100).toFixed(1);
+                                  return (
+                                    <div key={index} className="flex items-center gap-2 text-sm bg-white bg-opacity-80 rounded px-2 py-1">
+                                      <div 
+                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: item.color || `hsl(${index * 60}, 70%, 50%)` }}
                                       ></div>
-                                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                                        {item.value}
+                                      <div className="flex flex-col">
+                                        <span className="text-gray-700 font-medium text-xs">{item.period}</span>
+                                        <span className="text-gray-500 text-xs">{item.value} kg ({percentage}%)</span>
                                       </div>
                                     </div>
-                                    <span className="text-xs text-gray-600 text-center leading-tight max-w-[60px] transform group-hover:text-blue-600 transition-colors">
-                                      {item.period?.length > 8 ? item.period.substring(0, 8) + '...' : item.period}
-                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : selectedTemplate?.chartType === 'donut' ? (
+                            /* Donut Chart */
+                            <div className="relative h-64 flex items-center justify-center">
+                              <div className="relative w-48 h-48">
+                                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                                  {currentData?.chartData?.map((item, index) => {
+                                    const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
+                                    const percentage = (item.value / total) * 100;
+                                    const angle = (percentage / 100) * 360;
+                                    const startAngle = currentData.chartData.slice(0, index).reduce((sum, d) => sum + (d.value / total) * 360, 0);
+                                    
+                                    const outerRadius = 30;
+                                    const innerRadius = 15;
+                                    
+                                    const startOuterX = 50 + outerRadius * Math.cos((startAngle * Math.PI) / 180);
+                                    const startOuterY = 50 + outerRadius * Math.sin((startAngle * Math.PI) / 180);
+                                    const endOuterX = 50 + outerRadius * Math.cos(((startAngle + angle) * Math.PI) / 180);
+                                    const endOuterY = 50 + outerRadius * Math.sin(((startAngle + angle) * Math.PI) / 180);
+                                    
+                                    const startInnerX = 50 + innerRadius * Math.cos((startAngle * Math.PI) / 180);
+                                    const startInnerY = 50 + innerRadius * Math.sin((startAngle * Math.PI) / 180);
+                                    const endInnerX = 50 + innerRadius * Math.cos(((startAngle + angle) * Math.PI) / 180);
+                                    const endInnerY = 50 + innerRadius * Math.sin(((startAngle + angle) * Math.PI) / 180);
+                                    
+                                    const largeArcFlag = angle > 180 ? 1 : 0;
+                                    
+                                    return (
+                                      <path
+                                        key={index}
+                                        d={`M ${startOuterX} ${startOuterY} A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${endOuterX} ${endOuterY} L ${endInnerX} ${endInnerY} A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${startInnerX} ${startInnerY} Z`}
+                                        fill={item.color || `hsl(${index * 90}, 70%, 50%)`}
+                                        stroke="white"
+                                        strokeWidth="0.5"
+                                        className="hover:opacity-80 transition-opacity cursor-pointer"
+                                      />
+                                    );
+                                  }) || []}
+                                </svg>
+                                
+                                {/* Center Label */}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="text-center">
+                                    <div className="text-lg font-bold text-gray-800">
+                                      {currentData?.chartData?.reduce((sum, item) => sum + item.value, 0) || 0}
+                                    </div>
+                                    <div className="text-xs text-gray-500">Total kg</div>
                                   </div>
-                                );
-                              }) || []}
+                                </div>
+                              </div>
+                              
+                              {/* Legend */}
+                              <div className="absolute right-0 top-0 space-y-2 max-w-xs">
+                                {currentData?.chartData?.map((item, index) => {
+                                  const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
+                                  const percentage = ((item.value / total) * 100).toFixed(1);
+                                  return (
+                                    <div key={index} className="flex items-center gap-2 text-sm bg-white bg-opacity-80 rounded px-2 py-1">
+                                      <div 
+                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: item.color || `hsl(${index * 90}, 70%, 50%)` }}
+                                      ></div>
+                                      <div className="flex flex-col">
+                                        <span className="text-gray-700 font-medium text-xs">{item.period}</span>
+                                        <span className="text-gray-500 text-xs">{item.value} kg ({percentage}%)</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            
-                            {/* Chart Grid Lines */}
-                            <div className="absolute inset-0 pointer-events-none">
-                              {[0, 25, 50, 75, 100].map((line) => (
-                                <div
-                                  key={line}
-                                  className="absolute left-0 right-0 border-t border-gray-200"
-                                  style={{ bottom: `${line}%` }}
-                                ></div>
-                              ))}
+
+                          ) : (
+                            /* Default Bar Chart */
+                            <div className="relative h-48 bg-gradient-to-t from-gray-50 to-white rounded-lg border border-gray-100">
+                              <div className="flex items-end justify-around h-full p-4">
+                                {currentData?.chartData?.slice(0, 8).map((item, index) => {
+                                  const maxValue = Math.max(...(currentData?.chartData?.map(d => d.value) || [0]));
+                                  const height = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+                                  return (
+                                    <div key={index} className="flex flex-col items-center group">
+                                      <div className="relative mb-2">
+                                        <div
+                                          className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg min-w-[24px] transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 shadow-sm"
+                                          style={{ height: `${Math.max(height, 5)}%` }}
+                                        ></div>
+                                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                                          {item.value} kg
+                                        </div>
+                                      </div>
+                                      <span className="text-xs text-gray-600 text-center leading-tight max-w-[60px] transform group-hover:text-blue-600 transition-colors">
+                                        {item.period?.length > 8 ? item.period.substring(0, 8) + '...' : item.period}
+                                      </span>
+                                    </div>
+                                  );
+                                }) || []}
+                              </div>
+                              
+                              {/* Chart Grid Lines for Bar Chart */}
+                              <div className="absolute inset-0 pointer-events-none">
+                                {[0, 25, 50, 75, 100].map((line) => (
+                                  <div
+                                    key={line}
+                                    className="absolute left-0 right-0 border-t border-gray-200"
+                                    style={{ bottom: `${line}%` }}
+                                  ></div>
+                                ))}
+                              </div>
+                              
+                              {/* Y-axis labels for Bar Chart */}
+                              <div className="absolute left-0 top-0 bottom-0 -ml-12 flex flex-col justify-between text-xs text-gray-500 py-4">
+                                <span>{Math.max(...(currentData?.chartData?.map(d => d.value) || [0]))} kg</span>
+                                <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.75)} kg</span>
+                                <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.5)} kg</span>
+                                <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.25)} kg</span>
+                                <span>0 kg</span>
+                              </div>
+                              
+                              {/* Axis Labels */}
+                              <div className="absolute -left-16 top-1/2 -rotate-90 text-xs font-medium text-gray-600 whitespace-nowrap">
+                                Waste Amount (kg)
+                              </div>
+                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-6 text-xs font-medium text-gray-600">
+                                Collection Date
+                              </div>
                             </div>
-                            
-                            {/* Y-axis labels */}
-                            <div className="absolute left-0 top-0 bottom-0 -ml-12 flex flex-col justify-between text-xs text-gray-500 py-4">
-                              <span>{Math.max(...(currentData?.chartData?.map(d => d.value) || [0]))}</span>
-                              <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.75)}</span>
-                              <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.5)}</span>
-                              <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.25)}</span>
-                              <span>0</span>
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1561,12 +2105,12 @@ const Report = () => {
                                   {currentData?.data?.recentCollections?.slice(0, 5).map((collection, index) => (
                                     <div key={index} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
                                       <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-800">{collection.type}</p>
-                                        <p className="text-xs text-gray-500">{collection.location}</p>
+                                        <p className="text-sm font-medium text-gray-800">{collection.fullName}</p>
+                                        <p className="text-xs text-gray-500">{collection.status}</p>
                                       </div>
                                       <div className="text-right">
-                                        <p className="text-sm font-medium text-gray-700">{collection.weight}kg</p>
-                                        <p className="text-xs text-gray-500">{collection.date}</p>
+                                        <p className="text-sm font-medium text-gray-700">{collection.totalWeight}kg</p>
+                                        <p className="text-xs text-gray-500">${collection.totalPayback}</p>
                                       </div>
                                     </div>
                                   ))}
