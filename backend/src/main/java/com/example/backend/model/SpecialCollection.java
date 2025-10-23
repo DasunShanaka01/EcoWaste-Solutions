@@ -22,7 +22,10 @@ public class SpecialCollection {
     private String instructions;
     private String status = "Pending";
     private String paymentStatus = "Unpaid";
+    private String paymentMethod; // Cash, Card, etc.
+    private String qrCodeData; // QR code data for collection verification
     private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime collectedAt; // When the collection was completed
 
     // getters & setters
 
@@ -138,11 +141,35 @@ public class SpecialCollection {
         this.paymentStatus = paymentStatus;
     }
 
+    public String getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getQrCodeData() {
+        return qrCodeData;
+    }
+
+    public void setQrCodeData(String qrCodeData) {
+        this.qrCodeData = qrCodeData;
+    }
+
+    public LocalDateTime getCollectedAt() {
+        return collectedAt;
+    }
+
+    public void setCollectedAt(LocalDateTime collectedAt) {
+        this.collectedAt = collectedAt;
     }
 }

@@ -304,7 +304,8 @@ export default function ScheduleSpecial() {
           longitude: location.longitude,
           address: location.address || 'User selected location'
         } : null,
-        instructions
+        instructions,
+        paymentMethod: paymentMethod // Include the selected payment method
       };
       const res = await scApi.schedule(payload);
       setScheduled(res);
@@ -808,8 +809,63 @@ export default function ScheduleSpecial() {
               {step === 5 && (
                 <div className="max-w-xl">
                   <h2 className="text-2xl font-bold mb-2">Order Summary</h2>
-                  <p className="text-gray-600 mb-6">Review details before scheduling</p>
+                  <p className="text-gray-600 mb-6">Review details and select payment method before scheduling</p>
                   <Summary />
+                  
+                  {/* Payment Method Selection */}
+                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-3">Select Payment Method</h3>
+                    <div className="grid grid-cols-3 gap-3">
+                      <button 
+                        onClick={() => setPaymentMethod('card')} 
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors ${
+                          paymentMethod === 'card' 
+                            ? 'border-green-500 bg-green-50 text-green-700' 
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-green-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <div className="text-2xl mb-1">💳</div>
+                          <div className="font-medium">Card</div>
+                        </div>
+                      </button>
+                      <button 
+                        onClick={() => setPaymentMethod('bank')} 
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors ${
+                          paymentMethod === 'bank' 
+                            ? 'border-green-500 bg-green-50 text-green-700' 
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-green-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <div className="text-2xl mb-1">🏦</div>
+                          <div className="font-medium">Bank Transfer</div>
+                        </div>
+                      </button>
+                      <button 
+                        onClick={() => setPaymentMethod('cash')} 
+                        className={`px-4 py-3 rounded-lg border-2 transition-colors ${
+                          paymentMethod === 'cash' 
+                            ? 'border-green-500 bg-green-50 text-green-700' 
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-green-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <div className="text-2xl mb-1">💵</div>
+                          <div className="font-medium">Cash</div>
+                        </div>
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-3">
+                      {paymentMethod === 'cash' 
+                        ? 'Payment will be collected during pickup' 
+                        : paymentMethod === 'bank' 
+                        ? 'You will receive bank transfer details after scheduling'
+                        : 'You will be redirected to payment after scheduling'
+                      }
+                    </p>
+                  </div>
+                  
                   <div className="mt-4 text-sm text-gray-600">You can go back to update details. The summary on the right updates live.</div>
                 </div>
               )}
@@ -819,30 +875,10 @@ export default function ScheduleSpecial() {
                 <div className="max-w-lg">
                   <h2 className="text-2xl font-bold mb-2">Payment</h2>
                   <p className="text-gray-600 mb-6">Complete payment to confirm your booking</p>
-                  {!scheduled?.collectionId && (
-                    <button onClick={scheduleOrder} disabled={submitting} className={`px-6 py-3 rounded-lg text-white ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} `}>
-                      {submitting ? (
-                        <span className="inline-flex items-center gap-2">
-                          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                          </svg>
-                          Scheduling...
-                        </span>
-                      ) : 'Schedule & Proceed to Pay'}
-                    </button>
-                  )}
                   {scheduled?.collectionId && !paid && (
                     <div className="space-y-4">
                       <div className="text-sm text-gray-700">Collection ID: <span className="font-mono">{scheduled.collectionId}</span></div>
-                      <div>
-                        <p className="text-sm text-gray-600 mb-2">Choose a payment method</p>
-                        <div className="grid grid-cols-3 gap-2">
-                          <button onClick={() => setPaymentMethod('card')} className={`px-3 py-2 rounded border ${paymentMethod === 'card' ? 'border-green-600 text-green-700' : 'border-gray-300 text-gray-700'}`}>Card</button>
-                          <button onClick={() => setPaymentMethod('bank')} className={`px-3 py-2 rounded border ${paymentMethod === 'bank' ? 'border-green-600 text-green-700' : 'border-gray-300 text-gray-700'}`}>Bank Transfer</button>
-                          <button onClick={() => setPaymentMethod('cash')} className={`px-3 py-2 rounded border ${paymentMethod === 'cash' ? 'border-green-600 text-green-700' : 'border-gray-300 text-gray-700'}`}>Cash</button>
-                        </div>
-                      </div>
+                      <div className="text-sm text-gray-700">Payment Method: <span className="font-medium capitalize">{paymentMethod}</span></div>
                       <button onClick={openPayment} className="px-6 py-3 rounded-lg text-white bg-blue-600 hover:bg-blue-700">Proceed to Pay LKR {Number(scheduled.fee ?? fee).toFixed(2)}</button>
                     </div>
                   )}

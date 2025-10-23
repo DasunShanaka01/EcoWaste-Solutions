@@ -26,6 +26,7 @@ public class SpecialCollectionDTOs {
         public String location; // front door, garage, lobby
         public GeoLocation coordinates;
         public String instructions;
+        public String paymentMethod; // Cash, Card, Bank, etc.
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -297,6 +297,50 @@ public class WasteController {
 		}
 	}
 
+	// Get QR code base64 for a specific waste submission
+	@GetMapping("/{id}/qr-base64")
+	public ResponseEntity<Map<String, String>> getQRCodeBase64(@PathVariable ObjectId id) {
+		try {
+			Optional<Waste> waste = wasteService.findById(id);
+			if (waste.isPresent()) {
+				Waste wasteData = waste.get();
+				String qrCodeBase64 = wasteService.generateQRCodeBase64(wasteData.getId().toString(), wasteData.getUserId());
+				Map<String, String> response = new HashMap<>();
+				response.put("qrCode", qrCodeBase64);
+				response.put("wasteId", wasteData.getId().toString());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, String> errorResponse = new HashMap<>();
+			errorResponse.put("error", e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Get QR code as image file for download
+	@GetMapping("/{id}/qr")
+	public ResponseEntity<byte[]> getQRCodeImage(@PathVariable ObjectId id) {
+		try {
+			Optional<Waste> waste = wasteService.findById(id);
+			if (waste.isPresent()) {
+				Waste wasteData = waste.get();
+				byte[] qrCodeBytes = wasteService.generateQRCodeBytes(wasteData.getId().toString(), wasteData.getUserId());
+				return ResponseEntity.ok()
+					.header("Content-Type", "image/png")
+					.header("Content-Disposition", "attachment; filename=qr-code-" + id + ".png")
+					.body(qrCodeBytes);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
 	// Scan QR code and get waste details
 	@PostMapping("/scan-qr")
 	public ResponseEntity<Map<String, Object>> scanQRCode(@RequestBody Map<String, String> request) {
@@ -344,6 +388,7 @@ public class WasteController {
 				response.put("items", wasteData.getItems());
 				response.put("pickup", wasteData.getPickup());
 				response.put("location", wasteData.getLocation());
+				response.put("type", "recyclable"); // Add type to distinguish from special waste
 				return new ResponseEntity<>(response, HttpStatus.OK);
 			} else {
 				Map<String, Object> errorResponse = new HashMap<>();
@@ -389,6 +434,113 @@ public class WasteController {
 		} catch (Exception e) {
 			e.printStackTrace();
 			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Find waste by simple ID (6-digit ID)
+	@GetMapping("/find/{id}")
+	public ResponseEntity<Map<String, Object>> findWasteById(@PathVariable String id) {
+		try {
+			Optional<Waste> waste = wasteService.findBySimpleId(id);
+			if (waste.isPresent()) {
+				Map<String, Object> response = new HashMap<>();
+				Waste wasteData = waste.get();
+				response.put("wasteId", wasteData.getId().toString());
+				response.put("simpleId", wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
+				response.put("userName", wasteData.getFullName());
+				response.put("phoneNumber", wasteData.getPhoneNumber());
+				response.put("email", wasteData.getEmail());
+				response.put("category",
+						wasteData.getItems().isEmpty() ? "Mixed" : wasteData.getItems().get(0).getCategory());
+				response.put("weight", wasteData.getTotalWeightKg());
+				response.put("submissionMethod", wasteData.getSubmissionMethod());
+				response.put("status", wasteData.getStatus());
+				response.put("paybackAmount", wasteData.getTotalPaybackAmount());
+				response.put("submissionDate",
+						wasteData.getSubmissionDate() != null ? wasteData.getSubmissionDate().toString() : null);
+				response.put("items", wasteData.getItems());
+				response.put("pickup", wasteData.getPickup());
+				response.put("location", wasteData.getLocation());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error finding waste: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Update waste status by simple ID
+	@PutMapping("/{id}/status")
+	public ResponseEntity<Map<String, Object>> updateWasteStatus(@PathVariable String id, @RequestBody Map<String, String> request) {
+		try {
+			String newStatus = request.get("status");
+			if (newStatus == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Status is required");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			Optional<Waste> waste = wasteService.updateBySimpleId(id, newStatus);
+			if (waste.isPresent()) {
+				Map<String, Object> response = new HashMap<>();
+				Waste wasteData = waste.get();
+				response.put("wasteId", wasteData.getId().toString());
+				response.put("simpleId", wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
+				response.put("status", wasteData.getStatus());
+				response.put("message", "Waste status updated successfully");
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error updating waste status: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Update payment status by simple ID
+	@PutMapping("/{id}/payment-status")
+	public ResponseEntity<Map<String, Object>> updatePaymentStatus(@PathVariable String id, @RequestBody Map<String, String> request) {
+		try {
+			String newPaymentStatus = request.get("paymentStatus");
+			if (newPaymentStatus == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Payment status is required");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			Optional<Waste> wasteOpt = wasteService.findBySimpleId(id);
+			if (wasteOpt.isPresent()) {
+				Waste waste = wasteOpt.get();
+				waste.setPaymentStatus(newPaymentStatus);
+				Waste updatedWaste = wasteService.updateWaste(waste);
+				
+				Map<String, Object> response = new HashMap<>();
+				response.put("wasteId", updatedWaste.getId().toString());
+				response.put("simpleId", updatedWaste.getId().toString().substring(updatedWaste.getId().toString().length() - 6));
+				response.put("paymentStatus", updatedWaste.getPaymentStatus());
+				response.put("message", "Payment status updated successfully");
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error updating payment status: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

@@ -47,4 +47,18 @@ public class EmailServiceImpl implements EmailService {
                 + (success ? "Thank you for your payment." : "Please try again or use another method."));
         mailSender.send(message);
     }
+
+    @Override
+    public void sendCollectionCompletedNotification(String email, String collectionId, String date, String timeSlot) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Collection Completed - " + collectionId);
+        message.setText("Your special waste collection has been successfully completed!\n\n"
+                + "Collection ID: " + collectionId + "\n"
+                + "Scheduled Date: " + date + "\n"
+                + "Time Slot: " + timeSlot + "\n"
+                + "Completed At: " + java.time.LocalDateTime.now().toString() + "\n\n"
+                + "Thank you for using EcoWaste Solutions. Your waste has been properly disposed of.");
+        mailSender.send(message);
+    }
 }

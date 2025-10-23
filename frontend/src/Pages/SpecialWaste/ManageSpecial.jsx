@@ -10,6 +10,8 @@ export default function ManageSpecial() {
   const [slots, setSlots] = useState([]);
   const [date, setDate] = useState('');
   const [timeSlot, setTimeSlot] = useState('');
+  const [qrCodes, setQrCodes] = useState({});
+  const [showQRModal, setShowQRModal] = useState(null);
 
   const loadData = async () => {
     scApi.listMine().then(setItems).catch(() => setItems([]));
@@ -71,6 +73,76 @@ export default function ManageSpecial() {
     }
   };
 
+  const generateQRCode = async (collectionId) => {
+    try {
+      console.log('Generating QR code for collection:', collectionId);
+      const response = await fetch(`http://localhost:8081/api/special-collection/qr-base64/${collectionId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      console.log('QR code response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('QR code data received:', data);
+        setQrCodes(prev => ({ ...prev, [collectionId]: data.qrCode }));
+        return data.qrCode;
+      } else {
+        const errorText = await response.text();
+        console.error('QR code generation failed:', response.status, errorText);
+        throw new Error(`Failed to generate QR code: ${response.status} - ${errorText}`);
+      }
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      alert(`Failed to generate QR code: ${error.message}`);
+      return null;
+    }
+  };
+
+  const downloadQRCode = async (collectionId) => {
+    try {
+      console.log('Downloading QR code for collection:', collectionId);
+      const response = await fetch(`http://localhost:8081/api/special-collection/qr/${collectionId}`, {
+        credentials: 'include',
+      });
+      
+      console.log('Download QR code response status:', response.status);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `qr-code-${collectionId}.png`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        console.log('QR code downloaded successfully');
+      } else {
+        const errorText = await response.text();
+        console.error('Download QR code failed:', response.status, errorText);
+        throw new Error(`Failed to download QR code: ${response.status} - ${errorText}`);
+      }
+    } catch (error) {
+      console.error('Error downloading QR code:', error);
+      alert(`Failed to download QR code: ${error.message}`);
+    }
+  };
+
+  const showQRCode = async (collectionId) => {
+    let qrCode = qrCodes[collectionId];
+    if (!qrCode) {
+      qrCode = await generateQRCode(collectionId);
+    }
+    if (qrCode) {
+      setShowQRModal(collectionId);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -109,6 +181,7 @@ export default function ManageSpecial() {
               switch (status?.toLowerCase()) {
                 case 'scheduled': return 'bg-blue-100 text-blue-800 border-blue-200';
                 case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
+                case 'collected': return 'bg-green-100 text-green-800 border-green-200';
                 case 'completed': return 'bg-green-100 text-green-800 border-green-200';
                 default: return 'bg-gray-100 text-gray-800 border-gray-200';
               }
@@ -127,7 +200,11 @@ export default function ManageSpecial() {
             return (
               <div key={it.id} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 overflow-hidden">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-green-500 to-blue-500 p-4 text-white">
+                <div className={`p-4 text-white ${
+                  it.status?.toLowerCase() === 'collected' 
+                    ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
+                    : 'bg-gradient-to-r from-green-500 to-blue-500'
+                }`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-white rounded-full"></div>
@@ -176,6 +253,15 @@ export default function ManageSpecial() {
                       </svg>
                       <span>{it.location}</span>
                     </div>
+                    {/* Show completion timestamp for collected collections */}
+                    {it.status?.toLowerCase() === 'collected' && it.collectedAt && (
+                      <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                        <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="font-medium">Completed: {new Date(it.collectedAt).toLocaleString()}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment Status */}
@@ -193,40 +279,83 @@ export default function ManageSpecial() {
                     )}
                   </div>
 
+                  {/* QR Code Section - Only show for scheduled collections */}
+                  {it.status?.toLowerCase() === 'scheduled' && (
+                    <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0 0h-4m4 0V9a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h4m0 0h4a2 2 0 002-2V9a2 2 0 00-2-2h-4m0 0V5a2 2 0 012-2h4a2 2 0 012 2v4" />
+                          </svg>
+                          <span className="text-sm font-medium text-yellow-800">Collection QR Code</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => showQRCode(it.id)}
+                            className="px-3 py-1 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-all duration-300 text-xs font-medium"
+                          >
+                            👁️ View
+                          </button>
+                          <button
+                            onClick={() => downloadQRCode(it.id)}
+                            className="px-3 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-300 text-xs font-medium"
+                          >
+                            📥 Download
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Action Buttons */}
                   <div className="flex flex-wrap gap-2">
-                  {String(it.paymentStatus).toLowerCase() === 'unpaid' && (
-                    <button
-                      onClick={() => navigate('/special/schedule', { state: { payFor: it } })}
-                        className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-300 text-sm font-medium"
-                      >
-                        💳 Pay Now
-                      </button>
-                    )}
-                    
-                    {canReschedule && (
-                      <button 
-                        onClick={() => setSelected(it)} 
-                        className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:from-green-600 hover:to-teal-600 transition-all duration-300 text-sm font-medium"
-                      >
-                        📅 Reschedule
-                      </button>
-                    )}
-                    
-                    {canCancel && it.status?.toLowerCase() !== 'cancelled' && (
+                    {/* Show only "Collected" button if status is collected */}
+                    {it.status?.toLowerCase() === 'collected' ? (
                       <button
-                        onClick={() => cancelCollection(it)}
-                        className="flex-1 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-300 text-sm font-medium"
-                        title="Cancel and permanently delete this collection"
+                        disabled
+                        className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg cursor-not-allowed opacity-75 text-sm font-medium flex items-center justify-center gap-2"
                       >
-                        🗑️ Cancel & Delete
-                    </button>
-                  )}
-                    
-                    {!canReschedule && !canCancel && (
-                      <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-sm text-center">
-                        {hoursDiff <= 8 ? 'Too late to modify' : 'Cannot modify'}
-                      </div>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        ✅ Collected
+                      </button>
+                    ) : (
+                      <>
+                        {String(it.paymentStatus).toLowerCase() === 'unpaid' && (
+                          <button
+                            onClick={() => navigate('/special/schedule', { state: { payFor: it } })}
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-300 text-sm font-medium"
+                          >
+                            💳 Pay Now
+                          </button>
+                        )}
+                        
+                        {canReschedule && (
+                          <button 
+                            onClick={() => setSelected(it)} 
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:from-green-600 hover:to-teal-600 transition-all duration-300 text-sm font-medium"
+                          >
+                            📅 Reschedule
+                          </button>
+                        )}
+                        
+                        {canCancel && it.status?.toLowerCase() !== 'cancelled' && (
+                          <button
+                            onClick={() => cancelCollection(it)}
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-300 text-sm font-medium"
+                            title="Cancel and permanently delete this collection"
+                          >
+                            🗑️ Cancel & Delete
+                          </button>
+                        )}
+                        
+                        {!canReschedule && !canCancel && (
+                          <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-sm text-center">
+                            {hoursDiff <= 8 ? 'Too late to modify' : 'Cannot modify'}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -317,6 +446,65 @@ export default function ManageSpecial() {
                 >
                   Confirm Reschedule
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* QR Code Modal */}
+        {showQRModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowQRModal(null)}></div>
+            <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 p-8 max-w-md w-full transform transition-all duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800">Collection QR Code</h3>
+                  <p className="text-gray-600 text-sm">#{showQRModal}</p>
+                </div>
+                <button 
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full" 
+                  onClick={() => setShowQRModal(null)}
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="text-center">
+                {qrCodes[showQRModal] ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-center">
+                      <img 
+                        src={`data:image/png;base64,${qrCodes[showQRModal]}`} 
+                        alt="QR Code" 
+                        className="w-48 h-48 border-2 border-gray-200 rounded-xl"
+                      />
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Show this QR code to the collector to mark your collection as completed
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => downloadQRCode(showQRModal)}
+                        className="flex-1 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg hover:from-orange-600 hover:to-red-600 transition-all duration-300 text-sm font-medium"
+                      >
+                        📥 Download
+                      </button>
+                      <button
+                        onClick={() => setShowQRModal(null)}
+                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-300 text-sm font-medium"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Generating QR code...</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

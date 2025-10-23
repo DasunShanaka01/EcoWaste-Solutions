@@ -7,6 +7,8 @@ import WasteCollection from './Pages/Collector/WasteCollection.jsx';
 import AdminDashboard from './Pages/Admin/AdminDashboard.jsx';
 import CollectorDashboard from './Pages/Collector/CollectorDashboard.jsx';
 import CollectionHistory from './Pages/Collector/CollectionHistory.jsx';
+import RecyclableSpecialWasteMap from './Pages/Collector/RecyclableSpecialWasteMap.jsx';
+import QRScanner from './Pages/Collector/QRScanner.jsx';
 
 import RegisterStep1 from './Pages/Users/RegisterStep1.jsx';
 import EmailVerification from './Pages/Users/EmailVerification.jsx';
@@ -105,6 +107,26 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <CollectionHistory />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Recyclable & Special Waste Map */}
+        <Route
+          path="/collector/recyclable-special-map"
+          element={
+            <ProtectedRoute>
+              <RecyclableSpecialWasteMap />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* QR Scanner */}
+        <Route
+          path="/collector/qr-scanner"
+          element={
+            <ProtectedRoute>
+              <QRScanner />
             </ProtectedRoute>
           }
         />

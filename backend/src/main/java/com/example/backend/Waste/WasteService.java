@@ -66,7 +66,7 @@ public class WasteService {
                     status,
                     totalPaybackAmount,
                     phoneNumber);
-            String qrCodeBase64 = qrCodeService.generateQRCodeBase64(qrData);
+            String qrCodeBase64 = qrCodeService.generateQRCodeBase64(qrData, 200, 200);
             savedWaste.setQrCodeBase64(qrCodeBase64);
             return wasteRepository.save(savedWaste);
         } catch (Exception e) {
@@ -92,6 +92,66 @@ public class WasteService {
     // Find waste submissions by userId ordered by submission date (newest first)
     public List<Waste> findByUserIdOrderBySubmissionDateDesc(String userId) {
         return wasteRepository.findByUserIdOrderBySubmissionDateDesc(userId);
+    }
+
+    // Find waste by simple ID (last 6 digits)
+    public Optional<Waste> findBySimpleId(String id) {
+        // First try to find by full waste ID if it looks like a full ObjectId (24 characters)
+        if (id.length() == 24) {
+            try {
+                return wasteRepository.findById(new ObjectId(id));
+            } catch (Exception e) {
+                // Continue to simple ID search
+            }
+        }
+        
+        // Try to find by simple ID (last 6 digits)
+        List<Waste> allWastes = wasteRepository.findAll();
+        return allWastes.stream()
+            .filter(waste -> {
+                String wasteId = waste.getId().toString();
+                String simpleId = wasteId.length() >= 6 ? wasteId.substring(wasteId.length() - 6) : wasteId;
+                return simpleId.equals(id);
+            })
+            .findFirst();
+    }
+
+    // Update waste status by simple ID
+    public Optional<Waste> updateBySimpleId(String id, String newStatus) {
+        Optional<Waste> wasteOpt = findBySimpleId(id);
+        if (wasteOpt.isPresent()) {
+            Waste waste = wasteOpt.get();
+            waste.setStatus(newStatus);
+            return Optional.of(wasteRepository.save(waste));
+        }
+        return Optional.empty();
+    }
+
+    // Update waste object directly
+    public Waste updateWaste(Waste waste) {
+        return wasteRepository.save(waste);
+    }
+
+    // Generate QR code base64 for waste
+    public String generateQRCodeBase64(String wasteId, String userId) {
+        try {
+            String qrData = qrCodeService.generateWasteQRData(wasteId, userId);
+            return qrCodeService.generateQRCodeBase64(qrData, 200, 200);
+        } catch (Exception e) {
+            System.err.println("Error generating QR code base64: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // Generate QR code bytes for waste
+    public byte[] generateQRCodeBytes(String wasteId, String userId) {
+        try {
+            String qrData = qrCodeService.generateWasteQRData(wasteId, userId);
+            return qrCodeService.generateQRCodeBytes(qrData, 200, 200);
+        } catch (Exception e) {
+            System.err.println("Error generating QR code bytes: " + e.getMessage());
+            return null;
+        }
     }
 
 }

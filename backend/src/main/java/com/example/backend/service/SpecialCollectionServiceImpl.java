@@ -23,6 +23,7 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
     private final SpecialCollectionRepository specialCollectionRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final QRCodeService qrCodeService;
 
     // capacity per slot (simple static capacity for demo)
     private static final int MAX_PER_SLOT = 10;
@@ -30,10 +31,12 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
 
     public SpecialCollectionServiceImpl(SpecialCollectionRepository specialCollectionRepository,
                                         UserRepository userRepository,
-                                        EmailService emailService) {
+                                        EmailService emailService,
+                                        QRCodeService qrCodeService) {
         this.specialCollectionRepository = specialCollectionRepository;
         this.userRepository = userRepository;
         this.emailService = emailService;
+        this.qrCodeService = qrCodeService;
     }
 
     @Override
@@ -127,7 +130,18 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         sc.setFee(calculateFee(toFeeRequest(req)));
         sc.setStatus("Scheduled");
         sc.setPaymentStatus("Unpaid");
+        
+        // Debug: Log the payment method received
+        System.out.println("DEBUG: Received paymentMethod: " + req.paymentMethod);
+        System.out.println("DEBUG: PaymentMethod is null: " + (req.paymentMethod == null));
+        
+        sc.setPaymentMethod(req.paymentMethod != null ? req.paymentMethod : "Card"); // Default to Card if not specified
         SpecialCollection saved = specialCollectionRepository.save(sc);
+        
+        // Generate QR code data for the collection
+        String qrData = qrCodeService.generateCollectionQRData(saved.getId(), userId);
+        saved.setQrCodeData(qrData);
+        saved = specialCollectionRepository.save(saved);
         // send confirmation email
         emailService.sendSpecialCollectionConfirmation(user.getEmail(), saved.getId(), saved.getDate(), saved.getTimeSlot(), saved.getFee(), saved.getLocation());
         return saved;
@@ -188,6 +202,25 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         return specialCollectionRepository.findByUserId(userId).stream()
                 .sorted((a, b) -> a.getDate().compareTo(b.getDate()))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<SpecialCollection> findAll() {
+        System.out.println("SpecialCollectionServiceImpl.findAll() called");
+        List<SpecialCollection> allCollections = specialCollectionRepository.findAll();
+        System.out.println("Repository returned " + allCollections.size() + " special collections");
+        for (SpecialCollection sc : allCollections) {
+            System.out.println("Collection ID: " + sc.getId() + ", Category: " + sc.getCategory() + ", Lat: " + sc.getLatitude() + ", Lng: " + sc.getLongitude());
+        }
+        return allCollections;
+    }
+
+    @Override
+    public long count() {
+        System.out.println("SpecialCollectionServiceImpl.count() called");
+        long count = specialCollectionRepository.count();
+        System.out.println("Repository count: " + count);
+        return count;
     }
 
     @Override
@@ -277,6 +310,104 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         // Delete the collection from database
         specialCollectionRepository.delete(sc);
         return sc; // Return the deleted collection for response
+    }
+
+    @Override
+    public SpecialCollection markCollected(String qrCodeData) {
+        // Parse QR code data to extract collection ID and user ID
+        if (!qrCodeData.startsWith("EWS_COLLECTION:")) {
+            throw new CustomException("Invalid QR code format");
+        }
+        
+        String[] parts = qrCodeData.split(":");
+        if (parts.length != 3) {
+            throw new CustomException("Invalid QR code data");
+        }
+        
+        String collectionId = parts[1];
+        String userId = parts[2];
+        
+        SpecialCollection sc = specialCollectionRepository.findById(collectionId)
+                .orElseThrow(() -> new CustomException("Collection not found"));
+        
+        if (!sc.getUserId().equals(userId)) {
+            throw new CustomException("QR code does not match collection");
+        }
+        
+        if ("Collected".equals(sc.getStatus())) {
+            throw new CustomException("Collection has already been marked as collected");
+        }
+        
+        sc.setStatus("Collected");
+        sc.setCollectedAt(LocalDateTime.now());
+        SpecialCollection saved = specialCollectionRepository.save(sc);
+        
+        // Send email notification to user
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            emailService.sendCollectionCompletedNotification(user.getEmail(), saved.getId(), saved.getDate(), saved.getTimeSlot());
+        }
+        
+        return saved;
+    }
+
+    @Override
+    public String generateQRCodeBase64(String collectionId, String userId) {
+        try {
+            System.out.println("Generating QR code for collection: " + collectionId + ", user: " + userId);
+            String qrData = qrCodeService.generateCollectionQRData(collectionId, userId);
+            System.out.println("Generated QR data: " + qrData);
+            String base64 = qrCodeService.generateQRCodeBase64(qrData, 200, 200);
+            System.out.println("Generated QR code base64 length: " + base64.length());
+            return base64;
+        } catch (Exception e) {
+            System.err.println("Error generating QR code: " + e.getMessage());
+            e.printStackTrace();
+            throw new CustomException("Failed to generate QR code: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public byte[] generateQRCodeBytes(String collectionId, String userId) {
+        try {
+            System.out.println("Generating QR code bytes for collection: " + collectionId + ", user: " + userId);
+            String qrData = qrCodeService.generateCollectionQRData(collectionId, userId);
+            System.out.println("Generated QR data: " + qrData);
+            byte[] bytes = qrCodeService.generateQRCodeBytes(qrData, 200, 200);
+            System.out.println("Generated QR code bytes length: " + bytes.length);
+            return bytes;
+        } catch (Exception e) {
+            System.err.println("Error generating QR code bytes: " + e.getMessage());
+            e.printStackTrace();
+            throw new CustomException("Failed to generate QR code: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public java.util.Optional<SpecialCollection> findBySimpleId(String id) {
+        // First try to find by full collection ID if it looks like a full ObjectId (24 characters)
+        if (id.length() == 24) {
+            try {
+                return specialCollectionRepository.findById(id);
+            } catch (Exception e) {
+                // Continue to simple ID search
+            }
+        }
+        
+        // Try to find by simple ID (last 6 digits)
+        List<SpecialCollection> allCollections = specialCollectionRepository.findAll();
+        return allCollections.stream()
+            .filter(collection -> {
+                String collectionId = collection.getId();
+                String simpleId = collectionId.length() >= 6 ? collectionId.substring(collectionId.length() - 6) : collectionId;
+                return simpleId.equals(id);
+            })
+            .findFirst();
+    }
+
+    @Override
+    public SpecialCollection update(SpecialCollection collection) {
+        return specialCollectionRepository.save(collection);
     }
 
     private FeeRequest toFeeRequest(ScheduleRequest req) {

@@ -12,6 +12,9 @@ const defaultCenter = {
 };
 
 const Map = ({ markers = [], path = [], liveLocation = null }) => {
+  console.log('Map component received markers:', markers.length);
+  console.log('Map markers data:', markers);
+  
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk" // <-- PASTE YOUR API KEY HERE
@@ -98,16 +101,26 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
       )}
       
       {/* Draw a marker for each collection point */}
-      {/* Draw a marker for each collection point */}
       {markers.map((marker, index) => {
         const isSpecial = marker.type === 'special';
-        // Determine color by type/status: special -> purple, completed -> green, pending/other -> red
+        const isRecyclable = marker.type === 'recyclable';
+        // Determine color by type/status: recyclable -> green, special -> yellow, completed -> green, pending/other -> red
         const status = marker.status ? String(marker.status).toLowerCase() : null;
-        const iconUrl = isSpecial
-          ? `http://maps.google.com/mapfiles/ms/icons/purple-dot.png`
-          : (status === 'complete'
+        let iconUrl;
+        
+        if (marker.iconUrl) {
+          // Use custom icon URL if provided
+          iconUrl = marker.iconUrl;
+        } else if (isRecyclable) {
+          iconUrl = `http://maps.google.com/mapfiles/ms/icons/green-dot.png`;
+        } else if (isSpecial) {
+          iconUrl = `http://maps.google.com/mapfiles/ms/icons/yellow-dot.png`;
+        } else {
+          // Default behavior for other types
+          iconUrl = (status === 'complete'
             ? `http://maps.google.com/mapfiles/ms/icons/green-dot.png`
             : `http://maps.google.com/mapfiles/ms/icons/red-dot.png`);
+        }
 
         return (
           <Marker
@@ -134,9 +147,16 @@ const Map = ({ markers = [], path = [], liveLocation = null }) => {
       {active && (
         <InfoWindow position={{ lat: active.lat, lng: active.lng }} onCloseClick={() => setActive(null)}>
           <div style={{ maxWidth: 220 }}>
-            <div style={{ fontWeight: 600 }}>{active.type === 'special' ? 'Special Collection' : active.type === 'live' ? 'Current Location' : 'Collection Point'}</div>
+            <div style={{ fontWeight: 600 }}>
+              {active.type === 'special' ? 'Special Collection' : 
+               active.type === 'recyclable' ? 'Recyclable Collection' :
+               active.type === 'live' ? 'Current Location' : 'Collection Point'}
+            </div>
             <div style={{ fontSize: 12, color: '#444', marginTop: 6 }}>{active.address || ''}</div>
             {active.pointId && <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>ID: {String(active.pointId)}</div>}
+            {active.wasteType && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Type: {active.wasteType}</div>}
+            {active.weight && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Weight: {active.weight}kg</div>}
+            {active.fee && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Fee: LKR {active.fee}</div>}
           </div>
         </InfoWindow>
       )}
