@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-
 import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
-// import scApi from '../../api/specialCollection';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import scApi from '../../api/specialCollection';
+import { QrReader } from 'react-qr-reader';
 
 const RecyclableSpecialWasteMap = () => {
   const navigate = useNavigate();
@@ -59,7 +58,6 @@ const RecyclableSpecialWasteMap = () => {
   };
 
   // Fetch waste locations function
-  const fetchWasteLocations = useCallback(async () => {
   const fetchWasteLocations = useCallback(async () => {
     try {
       setError(null);
@@ -320,6 +318,38 @@ const RecyclableSpecialWasteMap = () => {
     } catch (err) {
       console.error('Error fetching waste locations:', err);
       setError('Failed to load collection data');
+    }
+  }, []);
+
+  // Load dashboard statistics
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await scApi.getDashboardStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Error loading dashboard stats:', err);
+    }
+  }, []);
+
+  // Search for collection by ID
+  const handleSearch = async () => {
+    if (!searchId.trim()) {
+      alert('Please enter a collection ID');
+      return;
+    }
+
+    setSearching(true);
+    setSearchResult(null);
+
+    try {
+      const data = await scApi.searchCollection(searchId);
+      setSearchResult(data);
+    } catch (err) {
+      console.error('Error searching collection:', err);
+      setSearchResult({
+        found: false,
+        message: 'Error searching for collection'
+      });
     } finally {
       setSearching(false);
     }
@@ -340,12 +370,27 @@ const RecyclableSpecialWasteMap = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   // Load recyclable and special waste collection locations from backend
   useEffect(() => {
-    fetchWasteLocations();
-  }, [fetchWasteLocations]);
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchWasteLocations(),
+          loadStats()
+        ]);
+      } catch (err) {
+        console.error('Error loading initial data:', err);
+        setError('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadInitialData();
+  }, [fetchWasteLocations, loadStats]);
 
   // Combine filtered markers for the map
   const allMarkers = [...filteredRecyclableMarkers, ...filteredSpecialMarkers];
@@ -432,6 +477,30 @@ const RecyclableSpecialWasteMap = () => {
     setUpdatingPayment(false);
   };
 
+  // Handle QR code detection from camera
+  const handleQRCodeDetected = (result, error) => {
+    console.log('QR detection result:', result);
+    console.log('QR detection error:', error);
+    
+    if (result && result.getText) {
+      const data = result.getText();
+      if (data && data.trim()) {
+        console.log('QR Code detected:', data);
+        setQrCodeInput(data);
+        setUseCamera(false); // Stop camera scanning
+        // Automatically process the detected QR code
+        setTimeout(() => {
+          handleQRScan();
+        }, 500);
+      }
+    }
+  };
+
+  // Handle camera errors
+  const handleCameraError = (error) => {
+    console.error('Camera error:', error);
+    setCameraError('Camera access denied or not available. Please use manual input instead.');
+  };
 
   // Start camera scanning
   const startCameraScan = () => {
@@ -632,10 +701,7 @@ const RecyclableSpecialWasteMap = () => {
     setUpdatingPayment(true);
     
     try {
-      // Extract simple ID (last 6 characters) from full collection ID
-      const simpleId = paybackData.id.length >= 6 ? paybackData.id.substring(paybackData.id.length - 6) : paybackData.id;
-      
-      const response = await fetch(`http://localhost:8081/api/special-collection/${simpleId}/payment-status`, {
+      const response = await fetch(`http://localhost:8081/api/special-collection/${paybackData.simpleId}/payment-status`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
@@ -1254,29 +1320,15 @@ const RecyclableSpecialWasteMap = () => {
                   </div>
                   
                   <div className="relative bg-gray-100 rounded-xl overflow-hidden">
-                    <Scanner
-                      onScan={(result) => {
-                        if (result) {
-                          console.log('QR Code detected:', result);
-                          setQrCodeInput(result);
-                          setUseCamera(false); // Stop camera scanning
-                          // Automatically process the detected QR code
-                          setTimeout(() => {
-                            handleQRScan();
-                          }, 500);
-                        }
-                      }}
-                      onError={(error) => {
-                        console.error('Camera error:', error);
-                        setCameraError('Camera access denied or not available. Please use manual input instead.');
-                      }}
+                    <QrReader
+                      delay={300}
+                      onError={handleCameraError}
+                      onResult={handleQRCodeDetected}
+                      style={{ width: '100%', height: '300px' }}
                       constraints={{
                         video: {
                           facingMode: 'environment'
                         }
-                      }}
-                      styles={{
-                        container: { width: '100%', height: '300px' }
                       }}
                     />
                     <div className="absolute inset-0 border-2 border-purple-500 rounded-xl pointer-events-none">
