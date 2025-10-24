@@ -1436,7 +1436,6 @@ const WasteForm = () => {
                                 customLocationSet: false,
                                 locationSearchQuery: '',
                                 showLocationPicker: false,
-                                weight: 0
                                 weight: 0,
                                 paybackMethod: '',
                                 bankTransferDetails: {
