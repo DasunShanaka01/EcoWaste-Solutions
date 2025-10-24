@@ -520,6 +520,26 @@ export default function UserProfile() {
                     </div>
                   </button>
                   <button
+                    onClick={() => setActiveTab('digitalWallet')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'digitalWallet'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                      </svg>
+                      Digital Wallet
+                      {digitalWallet && (
+                        <span className="ml-2 bg-purple-100 text-purple-600 text-xs font-medium px-2 py-1 rounded-full">
+                          {digitalWallet.points || 0} pts
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <button
                     onClick={() => setActiveTab('waste')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === 'waste'
@@ -656,6 +676,46 @@ export default function UserProfile() {
                       {user.emailVerified ? "Active" : "Pending Verification"}
                     </p>
                   </div>
+                  
+                  {/* Digital Wallet Balance */}
+                  {digitalWallet && (
+                    <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 rounded-xl md:col-span-2 text-white shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-purple-100 mb-1">Digital Wallet Balance</h3>
+                            <p className="text-3xl font-bold">{digitalWallet.points || 0}</p>
+                            <p className="text-purple-200 text-sm">Points Available</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => setActiveTab('digitalWallet')}
+                            className="text-sm bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-colors flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            View Details
+                          </button>
+                          <button
+                            onClick={() => fetchDigitalWallet(user.id || user._id)}
+                            className="text-sm bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-colors flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Refresh
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
                 </div>
@@ -745,6 +805,194 @@ export default function UserProfile() {
                 </div>
               )}
                 </div>
+              </div>
+            )}
+
+            {/* Digital Wallet Tab */}
+            {activeTab === 'digitalWallet' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Digital Wallet</h2>
+                  <button
+                    onClick={() => fetchDigitalWallet(user.id || user._id)}
+                    disabled={digitalWalletLoading}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex items-center gap-2"
+                  >
+                    <svg className={`w-4 h-4 ${digitalWalletLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
+
+                {digitalWalletLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                    <span className="ml-2 text-gray-600">Loading digital wallet...</span>
+                  </div>
+                ) : digitalWallet ? (
+                  <div className="space-y-6">
+                    {/* Balance Card */}
+                    <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-8 text-white">
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <h3 className="text-lg font-medium text-purple-100 mb-2">Current Balance</h3>
+                          <p className="text-4xl font-bold">{digitalWallet.points || 0}</p>
+                          <p className="text-purple-200 text-sm">Points Available</p>
+                        </div>
+                        <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                          <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => navigate("/waste-form")}
+                          className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-colors text-sm flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                          Earn More Points
+                        </button>
+                        <button
+                          onClick={() => fetchDigitalWallet(user.id || user._id)}
+                          className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-colors text-sm flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Refresh Balance
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Wallet Information */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Wallet Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Wallet ID</h4>
+                          <p className="text-lg text-gray-900 font-mono text-sm">{digitalWallet.id}</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">User ID</h4>
+                          <p className="text-lg text-gray-900 font-mono text-sm">{digitalWallet.userId}</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Created</h4>
+                          <p className="text-lg text-gray-900">
+                            {digitalWallet.createdAt ? new Date(digitalWallet.createdAt).toLocaleDateString() : "N/A"}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Last Updated</h4>
+                          <p className="text-lg text-gray-900">
+                            {digitalWallet.updatedAt ? new Date(digitalWallet.updatedAt).toLocaleDateString() : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Transaction History */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Transaction History</h3>
+                      {digitalWallet.transactions && digitalWallet.transactions.length > 0 ? (
+                        <div className="space-y-3">
+                          {digitalWallet.transactions
+                            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                            .slice(0, 10)
+                            .map((transaction, index) => (
+                            <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                  transaction.type === 'CREDIT' 
+                                    ? 'bg-green-100 text-green-600' 
+                                    : 'bg-red-100 text-red-600'
+                                }`}>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    {transaction.type === 'CREDIT' ? (
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    ) : (
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
+                                    )}
+                                  </svg>
+                                </div>
+                                <div>
+                                  <p className="font-medium text-gray-900">{transaction.description}</p>
+                                  <p className="text-sm text-gray-500">
+                                    {new Date(transaction.timestamp).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className={`text-lg font-semibold ${
+                                transaction.type === 'CREDIT' 
+                                  ? 'text-green-600' 
+                                  : 'text-red-600'
+                              }`}>
+                                {transaction.type === 'CREDIT' ? '+' : '-'}{Math.abs(transaction.amount)} pts
+                              </div>
+                            </div>
+                          ))}
+                          {digitalWallet.transactions.length > 10 && (
+                            <p className="text-center text-sm text-gray-500 mt-4">
+                              Showing last 10 transactions of {digitalWallet.transactions.length} total
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <svg className="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          <h4 className="text-lg font-medium text-gray-900 mb-2">No Transactions Yet</h4>
+                          <p className="text-gray-600 mb-4">Start earning points by submitting waste for recycling!</p>
+                          <button
+                            onClick={() => navigate("/waste-form")}
+                            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition duration-200"
+                          >
+                            Submit Waste
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Points Information */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-6 h-6 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <h4 className="text-lg font-medium text-blue-800 mb-2">How to Earn Points</h4>
+                          <ul className="text-sm text-blue-700 space-y-1">
+                            <li>• Submit recyclable waste items for collection</li>
+                            <li>• Points are calculated based on weight and material type</li>
+                            <li>• 1 point = 1 LKR of estimated payback value</li>
+                            <li>• Points are added when your waste is collected and payment is confirmed</li>
+                            <li>• Use points for future waste collection services or redeem for rewards</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-8 text-center">
+                    <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Digital Wallet Not Found</h3>
+                    <p className="text-gray-600 mb-4">Your digital wallet will be created automatically when you submit your first waste item.</p>
+                    <button
+                      onClick={() => navigate("/waste-form")}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition duration-200"
+                    >
+                      Create Wallet by Submitting Waste
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

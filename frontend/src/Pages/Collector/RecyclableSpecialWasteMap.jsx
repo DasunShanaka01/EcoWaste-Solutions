@@ -202,6 +202,7 @@ const RecyclableSpecialWasteMap = () => {
             pointId: idStr || idx,
             type: 'recyclable',
             status: w.status || w.state || (w.status === undefined ? null : String(w.status)),
+            paymentStatus: w.paymentStatus || 'Unpaid',
             wasteType: 'Recyclable',
             weight: w.totalWeightKg || 0,
             items: w.items || [],
@@ -687,6 +688,8 @@ const RecyclableSpecialWasteMap = () => {
 
       const data = await response.json();
       console.log('Payment status update response:', data);
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
 
       if (response.ok) {
         // Update the manual search result with new payment status
@@ -696,8 +699,13 @@ const RecyclableSpecialWasteMap = () => {
             ...prev.data,
             paymentStatus: 'Complete'
           },
-          message: 'Payment confirmed! Now you can mark as collected.'
+          message: 'Payment confirmed! Points have been added to the user\'s digital wallet. Now you can mark as collected.'
         }));
+        
+        // Refresh the waste locations data to get updated status from backend
+        setTimeout(() => {
+          fetchWasteLocations();
+        }, 1000);
         
         setShowPaybackConfirmation(false);
         setPaybackData(null);
@@ -1207,6 +1215,7 @@ const RecyclableSpecialWasteMap = () => {
                           <div className="flex gap-4 mt-2 text-xs text-gray-500">
                             <span>Weight: {marker.weight}kg</span>
                             <span>Status: {marker.status || 'Pending'}</span>
+                            <span>Payment: {marker.paymentStatus || 'Unpaid'}</span>
                             <span>Items: {marker.items?.length || 0}</span>
                           </div>
                           {marker.fullName && (

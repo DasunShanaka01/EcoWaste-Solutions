@@ -24,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.example.backend.service.EmailService;
+import com.example.backend.service.DigitalWalletService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -39,6 +40,9 @@ public class WasteController {
 
 	@Autowired
 	private EmailService emailService;
+
+	@Autowired
+	private DigitalWalletService digitalWalletService;
 
 	private static final String UPLOAD_DIR = "uploads/";
 
@@ -479,6 +483,7 @@ public class WasteController {
 				response.put("weight", wasteData.getTotalWeightKg());
 				response.put("submissionMethod", wasteData.getSubmissionMethod());
 				response.put("status", wasteData.getStatus());
+				response.put("paymentStatus", wasteData.getPaymentStatus());
 				response.put("paybackAmount", wasteData.getTotalPaybackAmount());
 				response.put("paybackMethod", wasteData.getPaybackMethod());
 				response.put("bankTransferDetails", wasteData.getBankTransferDetails());
@@ -553,8 +558,42 @@ public class WasteController {
 			Optional<Waste> wasteOpt = wasteService.findBySimpleId(id);
 			if (wasteOpt.isPresent()) {
 				Waste waste = wasteOpt.get();
+				String oldPaymentStatus = waste.getPaymentStatus();
+				System.out.println("Updating payment status for waste ID: " + id);
+				System.out.println("Old payment status: " + oldPaymentStatus);
+				System.out.println("New payment status: " + newPaymentStatus);
+
 				waste.setPaymentStatus(newPaymentStatus);
 				Waste updatedWaste = wasteService.updateWaste(waste);
+
+				System.out.println("Updated waste payment status: " + updatedWaste.getPaymentStatus());
+
+				// Verify the update by fetching from database again
+				Optional<Waste> verifyWaste = wasteService.findBySimpleId(id);
+				if (verifyWaste.isPresent()) {
+					System.out.println("Verification - Payment status in DB: " + verifyWaste.get().getPaymentStatus());
+				} else {
+					System.out.println("ERROR: Could not find waste after update for verification!");
+				}
+
+				// Add points to Digital Wallet if payment status changed to "Complete"
+				if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus)) {
+					try {
+						// Calculate points based on payback amount (1 point per LKR)
+						int pointsToAdd = (int) Math.round(updatedWaste.getTotalPaybackAmount());
+						if (pointsToAdd > 0) {
+							digitalWalletService.addPoints(
+									updatedWaste.getUserId(),
+									pointsToAdd,
+									"Points earned from recyclable waste collection - "
+											+ updatedWaste.getId().toString());
+							System.out.println("Added " + pointsToAdd + " points to user " + updatedWaste.getUserId());
+						}
+					} catch (Exception e) {
+						System.err.println("Error adding points to digital wallet: " + e.getMessage());
+						// Don't fail the payment status update if digital wallet update fails
+					}
+				}
 
 				Map<String, Object> response = new HashMap<>();
 				response.put("wasteId", updatedWaste.getId().toString());

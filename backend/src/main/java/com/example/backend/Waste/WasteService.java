@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.example.backend.service.QRCodeService;
-import com.example.backend.service.DigitalWalletService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,9 +20,6 @@ public class WasteService {
 
     @Autowired
     private QRCodeService qrCodeService;
-
-    @Autowired
-    private DigitalWalletService digitalWalletService;
 
     public List<Waste> findAll() {
         return wasteRepository.findAll();
@@ -65,19 +61,10 @@ public class WasteService {
         // Save first to get the ID, then generate QR code
         Waste savedWaste = wasteRepository.save(waste);
 
-        // Handle digital wallet points if payback method is Digital Wallet
-        if (paybackMethod != null && paybackMethod.equals("Digital Wallet") && digitalWalletPoints != null
-                && digitalWalletPoints > 0) {
-            try {
-                digitalWalletService.addPoints(userId, digitalWalletPoints,
-                        "Points earned from waste recycling - "
-                                + (items.isEmpty() ? "Mixed" : items.get(0).getCategory()) +
-                                " (" + totalWeightKg + "kg)");
-            } catch (Exception e) {
-                System.err.println("Error adding digital wallet points: " + e.getMessage());
-                // Continue even if digital wallet update fails
-            }
-        }
+        // Note: Digital wallet points are now only added when payment status changes to
+        // "Complete"
+        // This ensures points are only credited after the waste is actually collected
+        // and payment is confirmed
 
         // Generate QR code with waste details
         try {
