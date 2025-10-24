@@ -36,7 +36,16 @@ const WasteForm = () => {
     customLocationSet: false,
     locationSearchQuery: '',
     showLocationPicker: false,
-    weight: 0
+    weight: 0,
+    paybackMethod: '',
+    bankTransferDetails: {
+      bankName: '',
+      accountNumber: '',
+      accountHolderName: '',
+      branchCode: ''
+    },
+    digitalWalletPoints: 0,
+    charityOrganization: ''
   });
   
   // State for storing submitted waste data and QR code
@@ -80,8 +89,9 @@ const WasteForm = () => {
     { id: 2, name: 'Select Method' },
     { id: 3, name: 'Enter Weight' },
     { id: 4, name: 'Payback Calculation' },
-    { id: 5, name: 'Schedule Pickup' },
-    { id: 6, name: 'Confirmation' }
+    { id: 5, name: 'Select Payback Method' },
+    { id: 6, name: 'Schedule Pickup' },
+    { id: 7, name: 'Confirmation' }
   ];
 
   const handleInputChange = (e) => {
@@ -248,9 +258,35 @@ const WasteForm = () => {
         setIsSubmitting(false);
         return;
       }
+      if (!formData.paybackMethod) {
+        alert('Please select a payback method');
+        setCurrentStep(5);
+        setIsSubmitting(false);
+        return;
+      }
+      if (formData.paybackMethod === 'Bank Transfer') {
+        if (!formData.bankTransferDetails.bankName || !formData.bankTransferDetails.accountNumber || !formData.bankTransferDetails.accountHolderName) {
+          alert('Please fill in all required bank transfer details');
+          setCurrentStep(5);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      if (formData.paybackMethod === 'Donation' && !formData.charityOrganization) {
+        alert('Please select a charity organization');
+        setCurrentStep(5);
+        setIsSubmitting(false);
+        return;
+      }
+      if (formData.submissionMethod === 'Home Pickup' && !formData.pickupDate) {
+        alert('Please select a pickup date');
+        setCurrentStep(6);
+        setIsSubmitting(false);
+        return;
+      }
       if (formData.submissionMethod === 'Home Pickup' && !formData.pickupTimeSlot) {
         alert('Please select a pickup time slot');
-        setCurrentStep(5);
+        setCurrentStep(6);
         setIsSubmitting(false);
         return;
       }
@@ -267,8 +303,18 @@ const WasteForm = () => {
       formDataToSend.append('status', 'Pending');
       formDataToSend.append('totalWeightKg', String(formData.weight || 0));
       formDataToSend.append('totalPaybackAmount', String(calculatePayback(formData.weight, formData.selectedCategory)));
-      formDataToSend.append('paymentMethod', 'Bank Transfer');
+      formDataToSend.append('paymentMethod', formData.paybackMethod);
       formDataToSend.append('paymentStatus', 'Pending');
+      formDataToSend.append('paybackMethod', formData.paybackMethod);
+      
+      // Add payback method specific details
+      if (formData.paybackMethod === 'Bank Transfer') {
+        formDataToSend.append('bankTransferDetails', JSON.stringify(formData.bankTransferDetails));
+      } else if (formData.paybackMethod === 'Digital Wallet') {
+        formDataToSend.append('digitalWalletPoints', String(Math.round(calculatePayback(formData.weight, formData.selectedCategory))));
+      } else if (formData.paybackMethod === 'Donation') {
+        formDataToSend.append('charityOrganization', formData.charityOrganization);
+      }
       
       const pickup = {
         required: formData.submissionMethod === 'Home Pickup',
@@ -302,7 +348,7 @@ const WasteForm = () => {
       }
 
       console.log('Sending request to backend...');
-      const response = await fetch('http://localhost:8080/api/waste/add', {
+  const response = await fetch('http://localhost:8081/api/waste/add', {
         method: 'POST',
         body: formDataToSend,
         credentials: 'include' // Include cookies for authentication
@@ -353,7 +399,7 @@ const WasteForm = () => {
   };
 
   const nextStep = () => {
-    if (currentStep < 6) setCurrentStep(currentStep + 1);
+    if (currentStep < 7) setCurrentStep(currentStep + 1);
   };
 
   const prevStep = () => {
@@ -910,7 +956,226 @@ const WasteForm = () => {
                 </div>
               )}
 
-              {currentStep === 5 && formData.submissionMethod === 'Home Pickup' && (
+              {currentStep === 5 && (
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Select Payback Method</h2>
+                  <p className="text-gray-600 mb-8">Choose how you want to receive your payback</p>
+                  
+                  <div className="max-w-4xl space-y-6">
+                    {/* Payback Method Options */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Bank Transfer Option */}
+                      <div
+                        className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
+                          formData.paybackMethod === 'Bank Transfer'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-green-300'
+                        }`}
+                        onClick={() => setFormData(prev => ({ ...prev, paybackMethod: 'Bank Transfer' }))}
+                      >
+                        <div className="text-center">
+                          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-semibold mb-2">Bank Transfer</h3>
+                          <p className="text-gray-600 text-sm">Direct transfer to your bank account</p>
+                        </div>
+                      </div>
+
+                      {/* Digital Wallet Option */}
+                      <div
+                        className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
+                          formData.paybackMethod === 'Digital Wallet'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-green-300'
+                        }`}
+                        onClick={() => setFormData(prev => ({ ...prev, paybackMethod: 'Digital Wallet' }))}
+                      >
+                        <div className="text-center">
+                          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-semibold mb-2">Digital Wallet</h3>
+                          <p className="text-gray-600 text-sm">Points added to your account</p>
+                        </div>
+                      </div>
+
+                      {/* Donation Option */}
+                      <div
+                        className={`border-2 rounded-lg p-6 cursor-pointer transition-all ${
+                          formData.paybackMethod === 'Donation'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-green-300'
+                        }`}
+                        onClick={() => setFormData(prev => ({ ...prev, paybackMethod: 'Donation' }))}
+                      >
+                        <div className="text-center">
+                          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-lg font-semibold mb-2">Donation</h3>
+                          <p className="text-gray-600 text-sm">Donate to charity organizations</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bank Transfer Details */}
+                    {formData.paybackMethod === 'Bank Transfer' && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-blue-800 mb-4">Bank Transfer Details</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-blue-700 mb-2">Bank Name *</label>
+                            <input
+                              type="text"
+                              name="bankName"
+                              value={formData.bankTransferDetails.bankName}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                bankTransferDetails: { ...prev.bankTransferDetails, bankName: e.target.value }
+                              }))}
+                              placeholder="e.g., Commercial Bank of Ceylon"
+                              className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-blue-700 mb-2">Account Number *</label>
+                            <input
+                              type="text"
+                              name="accountNumber"
+                              value={formData.bankTransferDetails.accountNumber}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                bankTransferDetails: { ...prev.bankTransferDetails, accountNumber: e.target.value }
+                              }))}
+                              placeholder="e.g., 1234567890"
+                              className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-blue-700 mb-2">Account Holder Name *</label>
+                            <input
+                              type="text"
+                              name="accountHolderName"
+                              value={formData.bankTransferDetails.accountHolderName}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                bankTransferDetails: { ...prev.bankTransferDetails, accountHolderName: e.target.value }
+                              }))}
+                              placeholder="e.g., John Doe"
+                              className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-blue-700 mb-2">Branch Code</label>
+                            <input
+                              type="text"
+                              name="branchCode"
+                              value={formData.bankTransferDetails.branchCode}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                bankTransferDetails: { ...prev.bankTransferDetails, branchCode: e.target.value }
+                              }))}
+                              placeholder="e.g., 001"
+                              className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+                          <p className="text-sm text-blue-800">
+                            <strong>Amount to be transferred:</strong> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Digital Wallet Details */}
+                    {formData.paybackMethod === 'Digital Wallet' && (
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-purple-800 mb-4">Digital Wallet</h3>
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="font-medium text-purple-800">Points will be added to your account</p>
+                              <p className="text-sm text-purple-600">
+                                You will receive {Math.round(calculatePayback(formData.weight, formData.selectedCategory))} points
+                              </p>
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border border-purple-200">
+                            <div className="flex justify-between items-center">
+                              <span className="text-purple-700 font-medium">Current Points:</span>
+                              <span className="text-lg font-bold text-purple-600">{formData.digitalWalletPoints}</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-2">
+                              <span className="text-purple-700 font-medium">Points to be added:</span>
+                              <span className="text-lg font-bold text-green-600">+{Math.round(calculatePayback(formData.weight, formData.selectedCategory))}</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-purple-200">
+                              <span className="text-purple-700 font-medium">New Total:</span>
+                              <span className="text-xl font-bold text-purple-600">{formData.digitalWalletPoints + Math.round(calculatePayback(formData.weight, formData.selectedCategory))}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Donation Details */}
+                    {formData.paybackMethod === 'Donation' && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-red-800 mb-4">Donation to Charity</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-red-700 mb-2">Select Charity Organization *</label>
+                            <select
+                              name="charityOrganization"
+                              value={formData.charityOrganization}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-2 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                              required
+                            >
+                              <option value="">Choose a charity organization</option>
+                              <option value="Sri Lanka Red Cross Society">Sri Lanka Red Cross Society</option>
+                              <option value="World Vision Sri Lanka">World Vision Sri Lanka</option>
+                              <option value="UNICEF Sri Lanka">UNICEF Sri Lanka</option>
+                              <option value="Save the Children Sri Lanka">Save the Children Sri Lanka</option>
+                              <option value="Oxfam Sri Lanka">Oxfam Sri Lanka</option>
+                              <option value="CARE Sri Lanka">CARE Sri Lanka</option>
+                              <option value="Habitat for Humanity Sri Lanka">Habitat for Humanity Sri Lanka</option>
+                              <option value="Other">Other (specify in notes)</option>
+                            </select>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border border-red-200">
+                            <div className="flex justify-between items-center">
+                              <span className="text-red-700 font-medium">Donation Amount:</span>
+                              <span className="text-xl font-bold text-red-600">LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</span>
+                            </div>
+                            <p className="text-sm text-red-600 mt-2">
+                              Your payback amount will be donated to the selected charity organization.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 6 && formData.submissionMethod === 'Home Pickup' && (
                 <div>
                   <h2 className="text-2xl font-bold mb-2">Schedule Pickup & Address Details</h2>
                   <p className="text-gray-600 mb-8">Select a convenient date and time for pickup</p>
@@ -1071,7 +1336,7 @@ const WasteForm = () => {
                 </div>
               )}
 
-              {currentStep === 5 && formData.submissionMethod === 'Drop-off' && (
+              {currentStep === 6 && formData.submissionMethod === 'Drop-off' && (
                 <div>
                   <h2 className="text-2xl font-bold mb-2">Drop-off Information</h2>
                   <p className="text-gray-600 mb-8">No pickup scheduling needed for drop-off</p>
@@ -1100,7 +1365,7 @@ const WasteForm = () => {
                 </div>
               )}
 
-              {currentStep === 6 && (
+              {currentStep === 7 && (
                 <div>
                   {submittedWaste ? (
                     <div>
@@ -1172,6 +1437,16 @@ const WasteForm = () => {
                                 locationSearchQuery: '',
                                 showLocationPicker: false,
                                 weight: 0
+                                weight: 0,
+                                paybackMethod: '',
+                                bankTransferDetails: {
+                                  bankName: '',
+                                  accountNumber: '',
+                                  accountHolderName: '',
+                                  branchCode: ''
+                                },
+                                digitalWalletPoints: 0,
+                                charityOrganization: ''
                               });
                             }}
                             className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
@@ -1218,6 +1493,35 @@ const WasteForm = () => {
                                 )}
                               </>
                             )}
+                            <p><span className="font-medium">Payback Method:</span> {formData.paybackMethod}</p>
+                            {formData.paybackMethod === 'Bank Transfer' && (
+                              <>
+                                <p><span className="font-medium">Bank:</span> {formData.bankTransferDetails.bankName}</p>
+                                <p><span className="font-medium">Account:</span> {formData.bankTransferDetails.accountNumber}</p>
+                                <p><span className="font-medium">Account Holder:</span> {formData.bankTransferDetails.accountHolderName}</p>
+                              </>
+                            )}
+                            {formData.paybackMethod === 'Digital Wallet' && (
+                              <p><span className="font-medium">Points to be added:</span> {Math.round(calculatePayback(formData.weight, formData.selectedCategory))} points</p>
+                            )}
+                            {formData.paybackMethod === 'Donation' && (
+                              <p><span className="font-medium">Charity Organization:</span> {formData.charityOrganization}</p>
+                            )}
+                            {formData.submissionMethod === 'Home Pickup' && (
+                              <>
+                                <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>
+                                <p><span className="font-medium">Time Slot:</span> {formData.pickupTimeSlot}</p>
+                                {formData.locationAvailable ? (
+                                  <p><span className="font-medium">Location:</span> GPS Coordinates Captured</p>
+                                ) : (
+                                  <>
+                                    <p><span className="font-medium">Address:</span> {formData.address}</p>
+                                    <p><span className="font-medium">City:</span> {formData.city}</p>
+                                    <p><span className="font-medium">Zip Code:</span> {formData.zipCode}</p>
+                                  </>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -1246,7 +1550,7 @@ const WasteForm = () => {
               )}
             </div>
 
-            {currentStep < 6 && (
+            {currentStep < 7 && (
               <div className="flex justify-between mt-8 pt-6 border-t">
                 <button
                   onClick={prevStep}

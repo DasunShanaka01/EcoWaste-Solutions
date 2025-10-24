@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:8080/api/auth";
+const API_URL = "http://localhost:8081/api/auth";
 
 const api = {
   registerStep1: async (data) => {
@@ -35,6 +35,26 @@ const api = {
 
   registerStep2: async (userId, data) => {
     const res = await axios.post(`${API_URL}/register/step2/${userId}`, data, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
+
+  registerStep3: async (userId, data) => {
+    const res = await axios.post(`${API_URL}/register/step3/${userId}`, data, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
+
+  getWasteAccount: async (userId) => {
+    const res = await axios.get(`${API_URL}/waste-account/${userId}`, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
@@ -95,7 +115,7 @@ const api = {
 
   // Waste management
   getUserWasteSubmissions: async (userId) => {
-    const res = await axios.get(`http://localhost:8080/api/waste/user/${userId}`, { 
+  const res = await axios.get(`http://localhost:8081/api/waste/user/${userId}`, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
@@ -105,7 +125,7 @@ const api = {
   },
 
   deleteWasteSubmission: async (wasteId) => {
-    const res = await axios.delete(`http://localhost:8080/api/waste/${wasteId}`, { 
+  const res = await axios.delete(`http://localhost:8081/api/waste/${wasteId}`, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
@@ -115,7 +135,7 @@ const api = {
   },
 
   updateWasteSubmission: async (wasteId, updates) => {
-    const res = await axios.put(`http://localhost:8080/api/waste/${wasteId}/update`, updates, { 
+  const res = await axios.put(`http://localhost:8081/api/waste/${wasteId}/update`, updates, { 
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json'

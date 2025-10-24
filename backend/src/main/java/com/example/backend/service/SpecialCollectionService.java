@@ -16,6 +16,17 @@ public interface SpecialCollectionService {
     SpecialCollection markPaid(String userId, String collectionId);
     SpecialCollection markCashPending(String userId, String collectionId);
     SpecialCollection markUnpaid(String userId, String collectionId, String method);
+    List<SpecialCollection> findAll();
+    long count();
+    SpecialCollection markPaid(String userId, String collectionId);
+    SpecialCollection markCashPending(String userId, String collectionId);
+    SpecialCollection markUnpaid(String userId, String collectionId, String method);
+    SpecialCollection cancelCollection(String userId, String collectionId);
+    SpecialCollection markCollected(String qrCodeData);
+    String generateQRCodeBase64(String collectionId, String userId);
+    byte[] generateQRCodeBytes(String collectionId, String userId);
+    java.util.Optional<SpecialCollection> findBySimpleId(String id);
+    SpecialCollection update(SpecialCollection collection);
 }
 
 

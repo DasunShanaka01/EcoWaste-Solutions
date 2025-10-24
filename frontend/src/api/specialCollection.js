@@ -1,6 +1,7 @@
 import axios from "axios";
 
 const API_URL = "http://localhost:8080/api/special-collection";
+const API_URL = "http://localhost:8081/api/special-collection";
 
 const scApi = {
   calculateFee: async (data) => {
@@ -50,6 +51,22 @@ const scApi = {
   downloadReceipt: async (id) => {
     const res = await axios.get(`${API_URL}/receipt/${id}`, { withCredentials: true, responseType: 'blob' });
     return res;
+  },
+  cancel: async (id) => {
+    const res = await axios.post(`${API_URL}/cancel/${id}`, {}, { withCredentials: true });
+    return res.data;
+  },
+  getMapCollections: async () => {
+    const res = await axios.get(`${API_URL}/map`, { withCredentials: true });
+    return res.data;
+  },
+  getDashboardStats: async () => {
+    const res = await axios.get(`${API_URL}/dashboard/stats`, { withCredentials: true });
+    return res.data;
+  },
+  searchCollection: async (collectionId) => {
+    const res = await axios.get(`${API_URL}/search/${collectionId}`, { withCredentials: true });
+    return res.data;
   }
 };
 

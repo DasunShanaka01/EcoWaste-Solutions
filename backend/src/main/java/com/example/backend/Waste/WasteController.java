@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.example.backend.service.EmailService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,10 +37,19 @@ public class WasteController {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private EmailService emailService;
+
 	private static final String UPLOAD_DIR = "uploads/";
 
 	@GetMapping("/wastes")
 	public ResponseEntity<List<Waste>> getAllWastes() {
+		return new ResponseEntity<>(wasteService.findAll(), HttpStatus.OK);
+	}
+
+	// Get collection history for collectors
+	@GetMapping("/collections")
+	public ResponseEntity<List<Waste>> getCollectionHistory() {
 		return new ResponseEntity<>(wasteService.findAll(), HttpStatus.OK);
 	}
 
@@ -62,6 +72,10 @@ public class WasteController {
 			@RequestPart("totalPaybackAmount") String totalPaybackAmountStr,
 			@RequestPart("paymentMethod") String paymentMethod,
 			@RequestPart("paymentStatus") String paymentStatus,
+			@RequestPart("paybackMethod") String paybackMethod,
+			@RequestPart(value = "bankTransferDetails", required = false) String bankTransferDetailsJson,
+			@RequestPart(value = "digitalWalletPoints", required = false) String digitalWalletPointsStr,
+			@RequestPart(value = "charityOrganization", required = false) String charityOrganization,
 			@RequestPart("items") String itemsJson,
 			@RequestPart("location") String locationJson,
 			@RequestPart(value = "imageFile", required = false) MultipartFile imageFile) {
@@ -98,9 +112,22 @@ public class WasteController {
 				}
 			}
 
+			// Parse payback method specific details
+			Waste.BankTransferDetails bankTransferDetails = null;
+			Integer digitalWalletPoints = null;
+			if (paybackMethod.equals("Bank Transfer") && bankTransferDetailsJson != null
+					&& !bankTransferDetailsJson.isEmpty()) {
+				bankTransferDetails = objectMapper.readValue(bankTransferDetailsJson, Waste.BankTransferDetails.class);
+			}
+			if (paybackMethod.equals("Digital Wallet") && digitalWalletPointsStr != null
+					&& !digitalWalletPointsStr.isEmpty()) {
+				digitalWalletPoints = Integer.parseInt(digitalWalletPointsStr);
+			}
+
 			Waste savedWaste = wasteService.save(userId, fullName, phoneNumber, email, submissionMethod, status, pickup,
 					totalWeightKg, totalPaybackAmount, paymentMethod,
-					paymentStatus, items, imageUrl, location);
+					paymentStatus, paybackMethod, bankTransferDetails, digitalWalletPoints, charityOrganization, items,
+					imageUrl, location);
 			return new ResponseEntity<>(savedWaste, HttpStatus.CREATED);
 		} catch (Exception e) {
 			System.err.println("Error in waste submission: " + e.getMessage());
@@ -193,13 +220,22 @@ public class WasteController {
 	}
 
 	@DeleteMapping("/{id}")
-	public ResponseEntity<Void> deleteWaste(@PathVariable ObjectId id) {
-		Optional<Waste> existingWaste = wasteService.findById(id);
-		if (existingWaste.isPresent()) {
-			wasteService.deleteById(id);
-			return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-		} else {
-			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+	public ResponseEntity<?> deleteWaste(@PathVariable String id) {
+		try {
+			// Convert string to ObjectId
+			ObjectId objectId = new ObjectId(id);
+			Optional<Waste> existingWaste = wasteService.findById(objectId);
+			if (existingWaste.isPresent()) {
+				wasteService.deleteById(objectId);
+				return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+			} else {
+				System.err.println("Waste not found with ID: " + id);
+				return new ResponseEntity<>("Waste not found", HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			System.err.println("Error deleting waste with ID " + id + ": " + e.getMessage());
+			e.printStackTrace();
+			return new ResponseEntity<>("Error deleting waste: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -244,6 +280,13 @@ public class WasteController {
 							objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
 					wasteToUpdate.setItems(items);
 				}
+				// Allow status updates via JSON API (e.g., mark as Complete)
+				if (updates.containsKey("status")) {
+					Object s = updates.get("status");
+					if (s != null) {
+						wasteToUpdate.setStatus(String.valueOf(s));
+					}
+				}
 
 				Waste updatedWaste = wasteService.update(wasteToUpdate);
 				return new ResponseEntity<>(updatedWaste, HttpStatus.OK);
@@ -266,6 +309,52 @@ public class WasteController {
 				response.put("qrCodeBase64", waste.get().getQrCodeBase64());
 				response.put("wasteId", waste.get().getId().toString());
 				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Get QR code base64 for a specific waste submission
+	@GetMapping("/{id}/qr-base64")
+	public ResponseEntity<Map<String, String>> getQRCodeBase64(@PathVariable ObjectId id) {
+		try {
+			Optional<Waste> waste = wasteService.findById(id);
+			if (waste.isPresent()) {
+				Waste wasteData = waste.get();
+				String qrCodeBase64 = wasteService.generateQRCodeBase64(wasteData.getId().toString(),
+						wasteData.getUserId());
+				Map<String, String> response = new HashMap<>();
+				response.put("qrCode", qrCodeBase64);
+				response.put("wasteId", wasteData.getId().toString());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, String> errorResponse = new HashMap<>();
+			errorResponse.put("error", e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Get QR code as image file for download
+	@GetMapping("/{id}/qr")
+	public ResponseEntity<byte[]> getQRCodeImage(@PathVariable ObjectId id) {
+		try {
+			Optional<Waste> waste = wasteService.findById(id);
+			if (waste.isPresent()) {
+				Waste wasteData = waste.get();
+				byte[] qrCodeBytes = wasteService.generateQRCodeBytes(wasteData.getId().toString(),
+						wasteData.getUserId());
+				return ResponseEntity.ok()
+						.header("Content-Type", "image/png")
+						.header("Content-Disposition", "attachment; filename=qr-code-" + id + ".png")
+						.body(qrCodeBytes);
 			} else {
 				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
 			}
@@ -322,6 +411,7 @@ public class WasteController {
 				response.put("items", wasteData.getItems());
 				response.put("pickup", wasteData.getPickup());
 				response.put("location", wasteData.getLocation());
+				response.put("type", "recyclable"); // Add type to distinguish from special waste
 				return new ResponseEntity<>(response, HttpStatus.OK);
 			} else {
 				Map<String, Object> errorResponse = new HashMap<>();
@@ -367,6 +457,157 @@ public class WasteController {
 		} catch (Exception e) {
 			e.printStackTrace();
 			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Find waste by simple ID (6-digit ID)
+	@GetMapping("/find/{id}")
+	public ResponseEntity<Map<String, Object>> findWasteById(@PathVariable String id) {
+		try {
+			Optional<Waste> waste = wasteService.findBySimpleId(id);
+			if (waste.isPresent()) {
+				Map<String, Object> response = new HashMap<>();
+				Waste wasteData = waste.get();
+				response.put("wasteId", wasteData.getId().toString());
+				response.put("simpleId",
+						wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
+				response.put("userName", wasteData.getFullName());
+				response.put("phoneNumber", wasteData.getPhoneNumber());
+				response.put("email", wasteData.getEmail());
+				response.put("category",
+						wasteData.getItems().isEmpty() ? "Mixed" : wasteData.getItems().get(0).getCategory());
+				response.put("weight", wasteData.getTotalWeightKg());
+				response.put("submissionMethod", wasteData.getSubmissionMethod());
+				response.put("status", wasteData.getStatus());
+				response.put("paybackAmount", wasteData.getTotalPaybackAmount());
+				response.put("paybackMethod", wasteData.getPaybackMethod());
+				response.put("bankTransferDetails", wasteData.getBankTransferDetails());
+				response.put("digitalWalletPoints", wasteData.getDigitalWalletPoints());
+				response.put("charityOrganization", wasteData.getCharityOrganization());
+				response.put("submissionDate",
+						wasteData.getSubmissionDate() != null ? wasteData.getSubmissionDate().toString() : null);
+				response.put("items", wasteData.getItems());
+				response.put("pickup", wasteData.getPickup());
+				response.put("location", wasteData.getLocation());
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error finding waste: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Update waste status by simple ID
+	@PutMapping("/{id}/status")
+	public ResponseEntity<Map<String, Object>> updateWasteStatus(@PathVariable String id,
+			@RequestBody Map<String, String> request) {
+		try {
+			String newStatus = request.get("status");
+			if (newStatus == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Status is required");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			Optional<Waste> waste = wasteService.updateBySimpleId(id, newStatus);
+			if (waste.isPresent()) {
+				Map<String, Object> response = new HashMap<>();
+				Waste wasteData = waste.get();
+				response.put("wasteId", wasteData.getId().toString());
+				response.put("simpleId",
+						wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
+				response.put("status", wasteData.getStatus());
+				response.put("message", "Waste status updated successfully");
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error updating waste status: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Update payment status by simple ID
+	@PutMapping("/{id}/payment-status")
+	public ResponseEntity<Map<String, Object>> updatePaymentStatus(@PathVariable String id,
+			@RequestBody Map<String, String> request) {
+		try {
+			String newPaymentStatus = request.get("paymentStatus");
+			if (newPaymentStatus == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Payment status is required");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			Optional<Waste> wasteOpt = wasteService.findBySimpleId(id);
+			if (wasteOpt.isPresent()) {
+				Waste waste = wasteOpt.get();
+				waste.setPaymentStatus(newPaymentStatus);
+				Waste updatedWaste = wasteService.updateWaste(waste);
+
+				Map<String, Object> response = new HashMap<>();
+				response.put("wasteId", updatedWaste.getId().toString());
+				response.put("simpleId",
+						updatedWaste.getId().toString().substring(updatedWaste.getId().toString().length() - 6));
+				response.put("paymentStatus", updatedWaste.getPaymentStatus());
+				response.put("message", "Payment status updated successfully");
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error updating payment status: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Send collection email notification
+	@PostMapping("/send-collection-email")
+	public ResponseEntity<Map<String, Object>> sendCollectionEmail(@RequestBody Map<String, Object> request) {
+		try {
+			String email = (String) request.get("email");
+			String wasteId = (String) request.get("wasteId");
+			String category = (String) request.get("category");
+			Double weight = ((Number) request.get("weight")).doubleValue();
+			Double paybackAmount = ((Number) request.get("paybackAmount")).doubleValue();
+			String paybackMethod = (String) request.get("paybackMethod");
+			String collectedAt = (String) request.get("collectedAt");
+
+			if (email == null || wasteId == null || category == null || weight == null || paybackAmount == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Missing required fields");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			// Send email notification
+			emailService.sendRecyclableWasteCollectedNotification(
+					email, wasteId, category, weight, paybackAmount, paybackMethod, collectedAt);
+
+			Map<String, Object> response = new HashMap<>();
+			response.put("message", "Collection email sent successfully");
+			response.put("wasteId", wasteId);
+			return new ResponseEntity<>(response, HttpStatus.OK);
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Failed to send collection email: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 

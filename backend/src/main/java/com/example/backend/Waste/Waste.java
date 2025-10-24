@@ -24,12 +24,17 @@ public class Waste {
     private String email;
     private LocalDateTime submissionDate;
     private String submissionMethod; // "Home Pickup" or "Drop-off"
-    private String status; // "Pending", "Processed", "Completed"
+    // Status: only two states used by the collector UI: "Pending" and "Complete"
+    private String status = "Pending"; // default to Pending for new submissions
     private PickupDetails pickup;
     private double totalWeightKg;
     private double totalPaybackAmount;
     private String paymentMethod;
     private String paymentStatus;
+    private String paybackMethod; // Bank Transfer, Digital Wallet, Donation
+    private BankTransferDetails bankTransferDetails;
+    private Integer digitalWalletPoints;
+    private String charityOrganization;
     private List<Item> items;
     private String imageUrl;
 
@@ -90,5 +95,16 @@ public class Waste {
         private double latitude;
         private double longitude;
         private String address; // Added address field for location description
+    }
+
+    // Inner class for bank transfer details
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class BankTransferDetails {
+        private String bankName;
+        private String accountNumber;
+        private String accountHolderName;
+        private String branchCode;
     }
 }
