@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
-import scApi from '../../api/specialCollection';
 
 const WasteCollection = () => {
   const navigate = useNavigate();
@@ -44,112 +43,63 @@ const WasteCollection = () => {
 
   const [currentStop, setCurrentStop] = useState(null);
 
-  // Load waste submission locations from backend on mount
+  // Load waste account locations from backend on mount
   useEffect(() => {
-    const GEOCODE_KEY = "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk"; // same key used in Map.jsx
-
-    const geocodeAddress = async (address) => {
-      if (!address || address.trim() === '') return null;
-      try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GEOCODE_KEY}`;
-        const r = await fetch(url);
-        if (!r.ok) return null;
-        const j = await r.json();
-        if (j.status === 'OK' && Array.isArray(j.results) && j.results.length > 0) {
-          const loc = j.results[0].geometry.location;
-          return { lat: loc.lat, lng: loc.lng, formattedAddress: j.results[0].formatted_address };
-        }
-      } catch (err) {
-        // ignore geocode errors
-      }
-      return null;
-    };
 
     const fetchWasteLocations = async () => {
       try {
-        // fetch normal wastes
-        const res = await fetch('http://localhost:8081/api/waste/wastes', { credentials: 'include' });
+        // First, auto-randomize capacity for waste accounts
+        await autoRandomizeCapacity(0.5); // Randomize 50% of accounts
+        
+        // Then fetch waste accounts
+        console.log('Fetching waste accounts from API...');
+        const res = await fetch('http://localhost:8081/api/auth/waste-accounts', { credentials: 'include' });
+        console.log('API response status:', res.status);
+        
         if (!res.ok) {
-          console.error('Failed fetching wastes', res.status);
+          console.error('Failed fetching waste accounts', res.status, res.statusText);
+          const errorText = await res.text();
+          console.error('Error response:', errorText);
+          return;
         }
-        const data = res.ok ? await res.json() : [];
+        
+        const data = await res.json();
+        console.log('Raw API response:', data);
 
-        const wastesList = Array.isArray(data) ? data : [];
-        setWastes(wastesList);
+        const wasteAccountsList = Array.isArray(data) ? data.filter(account => account.accountId != null) : [];
+        console.log('Processed waste accounts list:', wasteAccountsList);
+        setWastes(wasteAccountsList); // Keep using wastes state for compatibility
 
-        const normalMarkers = wastesList.map((w, idx) => {
-          const rawId = w.id || w._id || w._id || w.id;
-          const idStr = rawId && rawId.$oid ? rawId.$oid : (rawId ? String(rawId) : null);
-          const loc = w.location || null;
-          const latVal = loc && (loc.latitude ?? loc.lat ?? loc.latitude);
-          const lngVal = loc && (loc.longitude ?? loc.lng ?? loc.long ?? loc.longitud);
+        const accountMarkers = wasteAccountsList.map((account, idx) => {
+          const loc = account.location || null;
+          const latVal = loc && (loc.latitude ?? loc.lat);
+          const lngVal = loc && (loc.longitude ?? loc.lng);
           if (latVal != null && lngVal != null) {
             return {
               lat: Number(latVal),
               lng: Number(lngVal),
-              address: (loc && (loc.address || loc.addr)) || (w.pickup && w.pickup.address) || w.fullName || '',
-              pointId: idStr || idx,
-              type: 'normal',
-              // include status so Map component can color markers (e.g. 'Complete' or 'Pending')
-              status: w.status || w.state || (w.status === undefined ? null : String(w.status))
+              address: loc.address || '',
+              pointId: account.accountId || `account-${idx}`,
+              type: 'waste_account',
+              status: 'active', // All waste accounts are considered active
+              capacity: account.capacity || 0.0 // Include capacity data
             };
           }
           return null;
         }).filter(Boolean);
 
-        // fetch special collections for this user (if any)
-        let specialMarkers = [];
-        try {
-          const specialList = await scApi.listMine();
-          if (Array.isArray(specialList) && specialList.length > 0) {
-            // geocode each location (best-effort, skip failures)
-            const geoPromises = specialList.map(async (sc, sidx) => {
-              // If the special collection already includes numeric coordinates, use them directly
-              // Common shapes: sc.lat & sc.lng, or sc.location = { lat, lng }
-              const latFromSc = sc && (sc.lat ?? (sc.location && (sc.location.lat ?? sc.location.latitude)) );
-              const lngFromSc = sc && (sc.lng ?? (sc.location && (sc.location.lng ?? sc.location.longitude)) );
-              if (latFromSc != null && lngFromSc != null) {
-                return {
-                  lat: Number(latFromSc),
-                  lng: Number(lngFromSc),
-                  address: (sc.address || (sc.location && sc.location.address)) || String(sc.location || sc.notes || '') || '',
-                  pointId: sc.id || sc.collectionId || `special-${sidx}`,
-                  type: 'special',
-                  status: sc.status || null
-                };
-              }
+        console.log('Waste accounts data:', wasteAccountsList);
+        console.log('Account markers:', accountMarkers);
 
-              // otherwise fall back to geocoding the textual location
-              const addr = typeof sc.location === 'string' ? sc.location : String(sc.location || '');
-              const geo = await geocodeAddress(addr);
-              if (geo) {
-                return {
-                  lat: Number(geo.lat),
-                  lng: Number(geo.lng),
-                  address: geo.formattedAddress || addr,
-                  pointId: sc.id || sc.collectionId || `special-${sidx}`,
-                  type: 'special',
-                  status: sc.status || null
-                };
-              }
-              return null;
-            });
-            const resolved = await Promise.all(geoPromises);
-            specialMarkers = resolved.filter(Boolean);
-          }
-        } catch (e) {
-          // listing special collections may fail if not authenticated; ignore
-        }
-
-        // compute stats from wastesList
-        const totalStops = wastesList.filter(w => w.location && (w.location.latitude != null || w.location.lat != null)).length;
-        const completed = wastesList.filter(w => String(w.status || '').toLowerCase() === 'complete').length;
-        const remaining = Math.max(0, totalStops - completed);
+        // compute stats from waste accounts
+        const totalStops = accountMarkers.length;
+        const completed = 0; // No completed status for waste accounts
+        const remaining = totalStops;
         setStats({ total: totalStops, completed, remaining });
 
-        setMarkers([...normalMarkers, ...specialMarkers]);
+        setMarkers(accountMarkers);
       } catch (e) {
-        console.error('Error loading waste locations', e);
+        console.error('Error loading waste account locations', e);
       }
     };
 
@@ -158,7 +108,7 @@ const WasteCollection = () => {
 
   const steps = [
     { id: 1, name: 'Route Overview' },
-    { id: 2, name: 'Scan Tag' },
+    { id: 2, name: 'Scan Account Tag' },
     { id: 3, name: 'Verify Account' },
     { id: 4, name: 'Record Weight' },
     { id: 5, name: 'Confirm Collection' }
@@ -222,6 +172,63 @@ const WasteCollection = () => {
     }
   };
 
+  // Process QR code data - moved outside handleScan to be accessible by other functions
+  const processQR = async (qrData) => {
+    try {
+      console.log('Processing QR data:', qrData);
+      
+      // Validate QR data format (should be account ID like WA123456789ABC)
+      if (!qrData || typeof qrData !== 'string') {
+        console.error('Invalid QR data format:', qrData);
+        setShowError(true);
+        setScanning(false);
+        return;
+      }
+      
+      // Check if it looks like a waste account ID
+      if (!qrData.startsWith('WA') || qrData.length < 10) {
+        console.warn('QR data does not appear to be a waste account ID:', qrData);
+        // Still try to process it in case it's valid
+      }
+      
+      // send to backend to parse and get waste account details
+      const res = await fetch('http://localhost:8081/api/auth/waste-accounts/scan-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ qrData: qrData.trim() })
+      });
+      
+      console.log('Backend response status:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Backend error:', res.status, errorText);
+        setShowError(true);
+        setScanning(false);
+        return;
+      }
+      
+      const json = await res.json();
+      console.log('Backend response data:', json);
+      
+      setScanResult({ success: true, data: json });
+      // populate verify account form data
+      setFormData(prev => ({
+        ...prev,
+        tagId: json.accountId || prev.tagId,
+        accountHolder: json.userName || prev.accountHolder,
+        address: json.address || prev.address
+      }));
+      setCurrentStep(3);
+    } catch (e) {
+      console.error('Error processing QR', e);
+      setShowError(true);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const handleScan = () => {
     // Start webcam scanner (if supported) or fallback to simulated scan
     setScanning(true);
@@ -236,6 +243,7 @@ const WasteCollection = () => {
         // Use BarcodeDetector if available in the browser (guard via window to satisfy ESLint)
         const BarcodeDetectorClass = typeof window !== 'undefined' ? window.BarcodeDetector || null : null;
         if (BarcodeDetectorClass) {
+          console.log('BarcodeDetector is available, starting QR detection...');
           const formats = ['qr_code'];
           const detector = new BarcodeDetectorClass({ formats });
           scanLoopRef.current = setInterval(async () => {
@@ -243,15 +251,19 @@ const WasteCollection = () => {
               if (!videoRef.current) return;
               const results = await detector.detect(videoRef.current);
               if (results && results.length > 0) {
+                console.log('QR code detected:', results[0]);
                 const q = results[0].rawValue || results[0].displayValue || results[0].raw_text || results[0].rawData;
+                console.log('Extracted QR data:', q);
                 stopCamera();
                 processQR(q);
               }
             } catch (err) {
+              console.warn('QR detection error (continuing):', err);
               // ignore detection errors per loop
             }
           }, 800);
         } else {
+          console.warn('BarcodeDetector not available, falling back to manual entry');
           // No BarcodeDetector: provide user a manual paste fallback after 5s
           setTimeout(() => {
             setShowError(true);
@@ -277,38 +289,6 @@ const WasteCollection = () => {
       }
     };
 
-    const processQR = async (qrData) => {
-      try {
-        // send to backend to parse and get user/waste details
-        const res = await fetch('http://localhost:8081/api/waste/scan-qr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ qrData })
-        });
-        if (!res.ok) {
-          setShowError(true);
-          setScanning(false);
-          return;
-        }
-        const json = await res.json();
-        setScanResult({ success: true, data: json });
-        // populate verify account form data
-        setFormData(prev => ({
-          ...prev,
-          tagId: json.wasteId || prev.tagId,
-          accountHolder: json.userName || prev.accountHolder,
-          address: json.pickup && json.pickup.address ? json.pickup.address : (json.location && json.location.address ? json.location.address : prev.address)
-        }));
-        setCurrentStep(3);
-      } catch (e) {
-        console.error('Error processing QR', e);
-        setShowError(true);
-      } finally {
-        setScanning(false);
-      }
-    };
-
     startCamera();
   };
 
@@ -318,7 +298,7 @@ const WasteCollection = () => {
     if (qr) {
       // process same as scanned
       try {
-        const res = await fetch('http://localhost:8081/api/waste/scan-qr', {
+        const res = await fetch('http://localhost:8081/api/auth/waste-accounts/scan-qr', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -329,9 +309,9 @@ const WasteCollection = () => {
         setScanResult({ success: true, data: json });
         setFormData(prev => ({
           ...prev,
-          tagId: json.wasteId || prev.tagId,
+          tagId: json.accountId || prev.tagId,
           accountHolder: json.userName || prev.accountHolder,
-          address: json.pickup && json.pickup.address ? json.pickup.address : (json.location && json.location.address ? json.location.address : prev.address)
+          address: json.address || prev.address
         }));
         setCurrentStep(3);
       } catch (e) {
@@ -340,29 +320,31 @@ const WasteCollection = () => {
     }
   };
 
-  // Allow manual lookup by waste report ID (no address required)
+  // Allow manual lookup by waste account ID (no address required)
   const handleManualId = async () => {
-    const id = window.prompt('Enter waste report ID (example: 650a5b3f... )');
+    const id = window.prompt('Enter waste account ID (example: WA123456789ABC)');
     if (!id) return;
     try {
-      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(id)}/details`, {
-        method: 'GET',
-        credentials: 'include'
+      const res = await fetch(`http://localhost:8081/api/auth/waste-accounts/scan-qr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ qrData: id })
       });
-      if (!res.ok) return alert('Waste not found');
+      if (!res.ok) return alert('Waste account not found');
       const json = await res.json();
-      // backend returns a map with waste details, populate scanResult and formData
+      // backend returns a map with waste account details, populate scanResult and formData
       setScanResult({ success: true, data: json });
       setFormData(prev => ({
         ...prev,
-        tagId: json.wasteId || id,
+        tagId: json.accountId || id,
         accountHolder: json.userName || prev.accountHolder,
-        address: (json.pickup && json.pickup.address) || (json.location && json.location.address) || prev.address
+        address: json.address || prev.address
       }));
       setCurrentStep(3);
     } catch (e) {
-      console.error('Error fetching waste details', e);
-      alert('Failed to fetch waste details');
+      console.error('Error fetching waste account details', e);
+      alert('Failed to fetch waste account details');
     }
   };
 
@@ -393,181 +375,116 @@ const WasteCollection = () => {
     setCurrentStep(5);
   };
 
-  const [updatingWeight, setUpdatingWeight] = useState(false);
-
-  // Update the given/stored weight on the backend for the current scanned/loaded waste
-  const updateGivenWeight = async () => {
+  // Auto-randomize capacity for waste accounts on page load
+  const autoRandomizeCapacity = async (percentage = 0.5) => {
     try {
-      if (!scanResult || !scanResult.data) return alert('No scanned waste to update');
-      const wasteId = scanResult.data.wasteId || formData.tagId;
-      if (!wasteId) return alert('No waste id available to update');
-      const value = Number(formData.weight);
-      if (isNaN(value) || value <= 0) return alert('Please provide a valid weight to update');
-      setUpdatingWeight(true);
-      // Calculate payback amount based on waste type and weight
-      const getPaybackRate = (wasteType) => {
-        const rates = {
-          'E-waste': 15.00,
-          'Plastic': 8.00,
-          'Glass': 6.00,
-          'Aluminum': 12.00,
-          'Paper/Cardboard': 4.00,
-          'general': 5.00 // Default rate for general waste
-        };
-        return rates[wasteType] || rates['general'];
-      };
-
-      const wasteType = scanResult?.data?.wasteType || formData.wasteType || 'general';
-      const paybackRate = getPaybackRate(wasteType);
-      const totalPaybackAmount = value * paybackRate;
-
-      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(wasteId)}/update`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          totalWeightKg: value,
-          totalPaybackAmount: totalPaybackAmount
-        })
+      const res = await fetch(`http://localhost:8081/api/auth/waste-accounts/randomize-capacity?percentage=${percentage}`, {
+        method: 'POST',
+        credentials: 'include'
       });
+      
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        alert('Failed to update weight: ' + (text || res.status));
-        setUpdatingWeight(false);
+        console.warn('Failed to auto-randomize capacity:', res.status, res.statusText);
         return;
       }
-      const updated = await res.json().catch(() => null);
-      // reflect the change locally
-      setScanResult(prev => ({
-        ...(prev || {}),
-        data: {
-          ...(prev?.data || {}),
-          weight: value,
-          totalPaybackAmount: totalPaybackAmount
-        }
-      }));
-      // also update wastes array if present
-      setWastes(prev => prev.map(w => {
-        const id = w.id || w._id || (w._id && w._id.$oid) || String(w.id);
-        if (id && String(id) === String(wasteId)) {
-          return { 
-            ...w, 
-            totalWeightKg: value, 
-            totalWeight: value, 
-            weight: value,
-            totalPaybackAmount: totalPaybackAmount
-          };
-        }
-        return w;
-      }));
-      setUpdatingWeight(false);
-      alert(`Weight updated successfully!\nWaste Type: ${wasteType}\nRate: LKR ${paybackRate.toFixed(2)}/kg\nPayback Amount: LKR ${totalPaybackAmount.toFixed(2)}`);
+      
+      console.log('Capacity auto-randomized successfully');
     } catch (e) {
-      console.error('Error updating given weight', e);
-      setUpdatingWeight(false);
-      alert('Error updating weight');
+      console.warn('Error auto-randomizing capacity:', e);
     }
   };
 
+
   const confirmCollection = async () => {
-    // Optimistically update stats
-    const newStats = {
-      total: stats.total,
-      completed: stats.completed + 1,
-      remaining: Math.max(0, stats.remaining - 1)
-    };
-    setStats(newStats);
-
-    const currentIndex = mockStops.findIndex(s => s.id === currentStop?.id);
-    const nextStop = currentIndex >= 0 ? (mockStops[currentIndex + 1] || null) : null;
-
-    // Helper to extract string id from waste record
-    const extractId = (w) => {
-      if (!w) return null;
-      if (typeof w === 'string') return w;
-      if (w._id && typeof w._id === 'string') return w._id;
-      if (w._id && w._id.$oid) return w._id.$oid;
-      if (w.id && typeof w.id === 'string') return w.id;
-      if (w.id && w.id.$oid) return w.id.$oid;
-      return null;
-    };
-
-    // Determine the id to update: prefer scanned wasteId, fallback to formData.tagId or matching wastes
-    let updateId = scanResult?.data?.wasteId || formData.tagId || null;
-    if (!updateId) {
-      // try to locate by matching the tag string in qrCodeBase64 or id fields
-      const tag = formData.tagId;
-      if (tag) {
-        const matched = wastes.find(w => (w.qrCodeBase64 && w.qrCodeBase64.includes(tag))) || wastes.find(w => {
-          const idStr = extractId(w);
-          return idStr && (idStr === tag || String(idStr) === String(tag));
-        });
-        updateId = extractId(matched);
-      }
-    }
-
     try {
-      if (!updateId) {
-        // nothing to update; still advance route/UI
-        if (nextStop) {
-          setCurrentStop(nextStop);
-          setCurrentStep(2);
-          setScanResult(null);
-          setShowError(false);
-          setShowManualEntry(false);
-          setFormData({
-            tagId: '',
-            accountHolder: '',
-            address: '',
-            weight: '',
-            wasteType: 'general',
-            manualWeight: false,
-            location: formData.location,
-            timestamp: null
-          });
-          captureLocation();
-        } else {
-          setCurrentStep(6);
-        }
-        return;
-      }
+      // Prepare collection data to save to database
+      const collectionData = {
+        accountId: formData.tagId,
+        accountHolder: formData.accountHolder,
+        address: formData.address,
+        weight: parseFloat(formData.weight) || 0,
+        wasteType: formData.wasteType,
+        location: formData.location,
+        timestamp: new Date().toISOString(),
+        collectorId: 'current_collector', // You might want to get this from user context
+        status: 'collected'
+      };
 
-      const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(updateId)}/update`, {
-        method: 'PUT',
+      console.log('Saving collection data:', collectionData);
+
+      // Save collection data to database using new collection endpoint
+      const res = await fetch('http://localhost:8081/api/collections', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: 'Complete' })
+        body: JSON.stringify({
+          accountId: formData.tagId,
+          accountHolder: formData.accountHolder,
+          address: formData.address,
+          weight: parseFloat(formData.weight) || 0,
+          wasteType: formData.wasteType,
+          location: formData.location ? {
+            latitude: formData.location.latitude,
+            longitude: formData.location.longitude,
+            address: formData.address
+          } : null,
+          collectorId: 'current_collector' // You might want to get this from user context
+        })
       });
 
       if (!res.ok) {
-        console.error('Failed to mark waste complete', res.status);
-        alert('Failed to mark waste as complete on server');
-        // rollback stats
-        setStats(prev => ({ total: prev.total, completed: Math.max(0, prev.completed - 1), remaining: prev.remaining + 1 }));
+        const errorText = await res.text();
+        console.error('Failed to save collection data', res.status, errorText);
+        alert('Failed to save collection data. Please try again.');
         return;
       }
 
-      // Update local wastes array and scanResult
-      setWastes(prev => prev.map(w => {
-        const idStr = extractId(w);
-        if (idStr && String(idStr) === String(updateId)) {
-          return { ...w, status: 'Complete' };
-        }
-        return w;
-      }));
+      const response = await res.json();
+      console.log('Collection saved successfully:', response);
+      
+      if (!response.success) {
+        console.error('Collection save failed:', response.error);
+        alert('Failed to save collection data: ' + response.error);
+        return;
+      }
 
-      setScanResult(prev => prev ? ({ ...prev, data: { ...(prev.data || {}), status: 'Complete' } }) : prev );
+      // Update stats
+      const newStats = {
+        total: stats.total,
+        completed: stats.completed + 1,
+        remaining: Math.max(0, stats.remaining - 1)
+      };
+      setStats(newStats);
 
-      // Remove the corresponding marker from the map so the completed location no longer shows
-      setMarkers(prev => Array.isArray(prev) ? prev.filter(m => String(m.pointId) !== String(updateId)) : prev);
+      // Remove the collected marker from the map
+      setMarkers(prev => Array.isArray(prev) ? prev.filter(m => String(m.pointId) !== String(formData.tagId)) : prev);
 
-      // Collection completed successfully - redirect to dashboard
-      alert('Collection completed successfully!');
-      navigate('/collector/dashboard');
+      // Reset form data and return to route overview
+      setFormData({
+        tagId: '',
+        accountHolder: '',
+        address: '',
+        weight: '',
+        wasteType: 'general',
+        manualWeight: false,
+        location: formData.location, // Keep current location
+        timestamp: null
+      });
+
+      // Clear scan results and errors
+      setScanResult(null);
+      setShowError(false);
+      setShowManualEntry(false);
+
+      // Return to route overview (step 1)
+      setCurrentStep(1);
+      
+      // Show success message
+      alert('Collection completed successfully! Returning to route overview.');
+
     } catch (e) {
-      console.error('Failed to mark waste complete', e);
-      // rollback stats
-      setStats(prev => ({ total: prev.total, completed: Math.max(0, prev.completed - 1), remaining: prev.remaining + 1 }));
+      console.error('Error saving collection data', e);
+      alert('Error saving collection data. Please try again.');
     }
   };
 
@@ -579,6 +496,11 @@ const WasteCollection = () => {
     } else if (currentStep === 3) {
       confirmAccount();
     } else if (currentStep === 4) {
+      // Validate weight before proceeding
+      if (!formData.weight || parseFloat(formData.weight) <= 0) {
+        alert('Please enter a valid weight to continue');
+        return;
+      }
       setCurrentStep(5);
     } else if (currentStep === 5) {
       confirmCollection();
@@ -643,23 +565,59 @@ const WasteCollection = () => {
               {currentStep === 1 && (
                 <div>
                   <h2 className="text-2xl font-bold mb-2">Waste Collection Route</h2>
-                  <p className="text-gray-600 mb-8">Start your collection route and scan waste tags at each location</p>
+                  <p className="text-gray-600 mb-8">Start your collection route and visit waste bin locations to collect waste</p>
 
                   <div className="mb-8">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold">Waste Bin Locations</h3>
+                      <div className="text-sm text-gray-600">
+                        Capacity automatically updated on page refresh
+                      </div>
+                    </div>
+                    
+                    {/* Priority Location Indicator */}
+                    {markers.length > 0 && (() => {
+                      // Sort markers by capacity descending (same logic as Map component)
+                      const sortedMarkers = [...markers].sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
+                      const highestCapacityMarker = sortedMarkers[0];
+                      console.log('WasteCollection - Sorted markers by capacity:', sortedMarkers.map(m => ({ id: m.pointId, capacity: m.capacity, address: m.address })));
+                      console.log('WasteCollection - Highest capacity marker:', highestCapacityMarker);
+                      
+                      return (
+                        <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                              <span className="text-white font-bold text-sm">1</span>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-orange-800">Priority Collection Point</span>
+                                <span className="px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded">HIGHEST CAPACITY</span>
+                              </div>
+                              <p className="text-sm text-orange-700 mt-1">
+                                {highestCapacityMarker?.address || 'Location details not available'} - 
+                                Capacity: {highestCapacityMarker?.capacity?.toFixed(1) || '0.0'}%
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    
                     <Map markers={markers} liveLocation={formData.location ? { lat: formData.location.latitude, lng: formData.location.longitude } : null} />
                   </div>
 
                   <div className="grid grid-cols-3 gap-4 mb-8">
                     <div className="bg-gray-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-gray-600 mb-1">Total Stops</p>
+                      <p className="text-sm text-gray-600 mb-1">Total Bins</p>
                       <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-green-700 mb-1">Completed</p>
-                      <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+                    <div className="bg-blue-50 rounded-lg p-6 text-center">
+                      <p className="text-sm text-blue-700 mb-1">Active Bins</p>
+                      <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
                     </div>
                     <div className="bg-yellow-50 rounded-lg p-6 text-center">
-                      <p className="text-sm text-yellow-700 mb-1">Remaining</p>
+                      <p className="text-sm text-yellow-700 mb-1">Available</p>
                       <p className="text-3xl font-bold text-yellow-600">{stats.remaining}</p>
                     </div>
                   </div>
@@ -672,7 +630,7 @@ const WasteCollection = () => {
                       <div>
                         <h3 className="font-semibold text-blue-900 mb-2">Ready to Start Collection</h3>
                         <p className="text-sm text-blue-800">
-                          Click the button below to begin your collection route. You will be asked to grant GPS permission for location tracking.
+                          Click the button below to begin your collection route. You will visit waste bin locations to collect waste. GPS permission is required for location tracking.
                         </p>
                       </div>
                     </div>
@@ -680,10 +638,10 @@ const WasteCollection = () => {
                 </div>
               )}
 
-              {/* Step 2: Scan Tag */}
+              {/* Step 2: Scan Account Tag */}
               {currentStep === 2 && currentStop && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Scan Waste Tag</h2>
+                  <h2 className="text-2xl font-bold mb-2">Scan Waste Bin Tag</h2>
                   <p className="text-gray-600 mb-8">Position the scanner near the waste bin tag to read data</p>
 
                   <div className="mb-6">
@@ -713,11 +671,22 @@ const WasteCollection = () => {
                         <svg className="w-24 h-24 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                         </svg>
-                        <p className="text-gray-600">Ready to scan waste tag</p>
+                        <p className="text-gray-600">Ready to scan waste bin tag</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          QR codes should contain waste account IDs (e.g., WA123456789ABC)
+                        </p>
                       </div>
 
                       <div className="mb-4">
                         <video ref={videoRef} autoPlay muted playsInline className="w-full h-64 bg-black rounded" />
+                        {scanning && (
+                          <div className="mt-2 text-center">
+                            <div className="inline-flex items-center gap-2 text-sm text-blue-600">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              Scanning for QR codes...
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex justify-center">
@@ -734,7 +703,7 @@ const WasteCollection = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          {scanning ? 'Scanning Tag...' : 'Activate Scanner'}
+                          {scanning ? 'Scanning Bin Tag...' : 'Activate Scanner'}
                         </button>
                       </div>
                     </div>
@@ -774,18 +743,18 @@ const WasteCollection = () => {
                     <div className="max-w-md mx-auto space-y-4">
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                         <p className="text-sm text-yellow-800">
-                          Manual entry mode. Please enter the waste ID to verify the account and continue with collection.
+                          Manual entry mode. Please enter the waste account ID to verify the account and continue with collection.
                         </p>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium mb-2">Waste ID *</label>
+                        <label className="block text-sm font-medium mb-2">Waste Account ID *</label>
                         <input
                           type="text"
                           name="tagId"
                           value={formData.tagId}
                           onChange={handleInputChange}
-                          placeholder="Enter waste ID (e.g., 650a5b3f...)"
+                          placeholder="Enter waste account ID (e.g., WA123456789ABC)"
                           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -794,35 +763,37 @@ const WasteCollection = () => {
                         onClick={async () => {
                           if (formData.tagId) {
                             try {
-                              const res = await fetch(`http://localhost:8081/api/waste/${encodeURIComponent(formData.tagId)}/details`, {
-                                method: 'GET',
-                                credentials: 'include'
+                              const res = await fetch(`http://localhost:8081/api/auth/waste-accounts/scan-qr`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({ qrData: formData.tagId })
                               });
                               if (!res.ok) {
-                                alert('Waste ID not found. Please check the ID and try again.');
+                                alert('Waste Account ID not found. Please check the ID and try again.');
                                 return;
                               }
                               const json = await res.json();
                               setScanResult({ success: true, data: json });
                               setFormData(prev => ({
                                 ...prev,
-                                tagId: json.wasteId || formData.tagId,
+                                tagId: json.accountId || formData.tagId,
                                 accountHolder: json.userName || prev.accountHolder,
-                                address: (json.pickup && json.pickup.address) || (json.location && json.location.address) || prev.address
+                                address: json.address || prev.address
                               }));
                               setShowManualEntry(false);
                               setCurrentStep(3);
                             } catch (e) {
-                              console.error('Error fetching waste details', e);
-                              alert('Failed to verify waste ID. Please check your connection and try again.');
+                              console.error('Error fetching waste account details', e);
+                              alert('Failed to verify waste account ID. Please check your connection and try again.');
                             }
                           } else {
-                            alert('Please enter a waste ID');
+                            alert('Please enter a waste account ID');
                           }
                         }}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition-colors"
                       >
-                        Verify Waste ID
+                        Verify Waste Account ID
                       </button>
                     </div>
                   )}
@@ -836,20 +807,24 @@ const WasteCollection = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                           </div>
-                          <span className="font-semibold text-green-900 text-lg">Tag Scanned Successfully</span>
+                          <span className="font-semibold text-green-900 text-lg">Bin Tag Scanned Successfully</span>
                         </div>
                         <div className="space-y-3 text-sm">
                           <div className="flex justify-between py-2 border-b border-green-200">
-                            <span className="text-green-700">Tag ID:</span>
-                            <span className="font-mono font-semibold text-green-900">{scanResult.data?.wasteId || scanResult.tagId}</span>
+                            <span className="text-green-700">Account ID:</span>
+                            <span className="font-mono font-semibold text-green-900">{scanResult.data?.accountId || scanResult.tagId}</span>
                           </div>
                           <div className="flex justify-between py-2 border-b border-green-200">
                             <span className="text-green-700">Account Holder:</span>
                             <span className="font-semibold text-green-900">{scanResult.data?.userName || scanResult.accountHolder}</span>
                           </div>
+                          <div className="flex justify-between py-2 border-b border-green-200">
+                            <span className="text-green-700">Capacity:</span>
+                            <span className="font-semibold text-green-900">{scanResult.data?.capacity ? `${scanResult.data.capacity.toFixed(1)}%` : 'N/A'}</span>
+                          </div>
                           <div className="flex justify-between py-2">
                             <span className="text-green-700">Location:</span>
-                            <span className="font-semibold text-green-900">{(scanResult.data?.pickup && scanResult.data.pickup.address) || (scanResult.data?.location && scanResult.data.location.address) || scanResult.address}</span>
+                            <span className="font-semibold text-green-900">{scanResult.data?.address || scanResult.address}</span>
                           </div>
                         </div>
                       </div>
@@ -876,12 +851,16 @@ const WasteCollection = () => {
                       <h3 className="font-semibold mb-4">Account Details</h3>
                       <div className="space-y-3">
                         <div className="flex justify-between py-2 border-b border-gray-200">
-                          <span className="text-gray-600">Tag ID:</span>
+                          <span className="text-gray-600">Account ID:</span>
                           <span className="font-mono font-semibold">{formData.tagId}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-gray-200">
                           <span className="text-gray-600">Account Holder:</span>
                           <span className="font-semibold">{formData.accountHolder}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-gray-200">
+                          <span className="text-gray-600">Capacity:</span>
+                          <span className="font-semibold">{scanResult?.data?.capacity ? `${scanResult.data.capacity.toFixed(1)}%` : 'N/A'}</span>
                         </div>
                         <div className="flex justify-between py-2">
                           <span className="text-gray-600">Address:</span>
@@ -910,8 +889,8 @@ const WasteCollection = () => {
               {/* Step 4: Record Weight */}
               {currentStep === 4 && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Waste Collection Data</h2>
-                  <p className="text-gray-600 mb-8">Waste type and weight have been automatically detected and recorded</p>
+                  <h2 className="text-2xl font-bold mb-2">Record Weight</h2>
+                  <p className="text-gray-600 mb-8">Enter the weight of the collected waste manually</p>
 
                   <div className="max-w-2xl space-y-6">
                     <div className="bg-gray-50 rounded-lg p-6">
@@ -919,99 +898,58 @@ const WasteCollection = () => {
                       <div className="space-y-2 text-sm">
                         <p><span className="font-medium">Account:</span> {formData.accountHolder}</p>
                         <p><span className="font-medium">Location:</span> {formData.address}</p>
-                        <p><span className="font-medium">Tag ID:</span> {formData.tagId}</p>
+                        <p><span className="font-medium">Account ID:</span> {formData.tagId}</p>
                       </div>
                     </div>
 
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-6 h-6 text-green-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-green-900 mb-2">Automatically Detected Data</h3>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-green-700">Waste Type:</span>
-                              <span className="font-semibold text-green-900 capitalize">{scanResult?.data?.wasteType || 'General Waste'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-green-700">Weight:</span>
-                              <span className="font-semibold text-green-900">{scanResult?.data?.weight || 'Auto-detected'} kg</span>
-                            </div>
-                          </div>
-                          <p className="text-xs text-green-700 mt-2">
-                            Data was automatically captured from the waste bin sensors and QR code information.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* User-provided weight verification */}
-                    {scanResult?.data?.weight && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                        <div className="flex items-start gap-3">
-                          <svg className="w-6 h-6 text-yellow-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-yellow-900 mb-2">User-Provided Weight Verification</h3>
-                            <p className="text-sm text-yellow-800 mb-3">
-                              The user provided a weight of <span className="font-semibold">{scanResult.data.weight} kg</span> for <span className="font-semibold">{scanResult.data.wasteType || 'General Waste'}</span> in their waste submission. 
-                              Please verify this is correct or update if needed.
-                            </p>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                value={formData.weight || scanResult.data.weight}
-                                onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value }))}
-                                step="0.1"
-                                className="flex-1 px-3 py-2 border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
-                                placeholder="Enter corrected weight"
-                              />
-                              <button
-                                onClick={updateGivenWeight}
-                                disabled={updatingWeight || !formData.weight}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                                  updatingWeight || !formData.weight
-                                    ? 'bg-gray-300 text-gray-700 cursor-not-allowed'
-                                    : 'bg-yellow-600 text-white hover:bg-yellow-700'
-                                }`}
-                              >
-                                {updatingWeight ? 'Updating...' : 'Update Weight'}
-                              </button>
-                            </div>
-                            <p className="text-xs text-yellow-700 mt-2">
-                              If the weight looks incorrect, enter the actual weight and click update. 
-                              Current rate: LKR {(() => {
-                                const rates = {
-                                  'E-waste': 15.00,
-                                  'Plastic': 8.00,
-                                  'Glass': 6.00,
-                                  'Aluminum': 12.00,
-                                  'Paper/Cardboard': 4.00,
-                                  'general': 5.00
-                                };
-                                const wasteType = scanResult?.data?.wasteType || 'general';
-                                return rates[wasteType] || rates['general'];
-                              })()}/kg
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h3 className="font-semibold mb-4">Weight Entry</h3>
+                      <div className="space-y-4">
                         <div>
-                          <p className="text-sm text-blue-800 font-medium">Sensor Data Confirmed</p>
-                          <p className="text-xs text-blue-700 mt-1">
-                            The waste collection vehicle's sensors have automatically recorded the weight and waste type. No manual entry required.
-                          </p>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Waste Weight (kg) *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              name="weight"
+                              value={formData.weight}
+                              onChange={handleInputChange}
+                              step="0.1"
+                              min="0.1"
+                              max="1000"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Enter weight in kilograms"
+                              required
+                            />
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                              <span className="text-gray-500 text-sm">kg</span>
+                            </div>
+                          </div>
+                          {!formData.weight && (
+                            <p className="text-red-500 text-xs mt-1">Weight is required to continue</p>
+                          )}
                         </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Waste Type
+                          </label>
+                          <select
+                            name="wasteType"
+                            value={formData.wasteType}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="general">General Waste</option>
+                            <option value="E-waste">E-waste</option>
+                            <option value="Plastic">Plastic</option>
+                            <option value="Glass">Glass</option>
+                            <option value="Aluminum">Aluminum</option>
+                            <option value="Paper/Cardboard">Paper/Cardboard</option>
+                          </select>
+                        </div>
+
                       </div>
                     </div>
 
@@ -1064,7 +1002,7 @@ const WasteCollection = () => {
                         </div>
                         <div className="flex justify-between py-2 border-b border-gray-200">
                           <span className="text-gray-600">Weight:</span>
-                          <span className="font-semibold">{formData.weight} kg {formData.manualWeight && '(Manual)'}</span>
+                          <span className="font-semibold">{formData.weight} kg (Manual Entry)</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-gray-200">
                           <span className="text-gray-600">Timestamp:</span>
@@ -1114,7 +1052,8 @@ const WasteCollection = () => {
                 <button
                   onClick={nextStep}
                   disabled={
-                    (currentStep === 2 && !scanResult)
+                    (currentStep === 2 && !scanResult) ||
+                    (currentStep === 4 && (!formData.weight || parseFloat(formData.weight) <= 0))
                   }
                   className="flex items-center gap-2 px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >

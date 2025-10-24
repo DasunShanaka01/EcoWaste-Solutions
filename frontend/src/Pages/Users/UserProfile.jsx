@@ -19,6 +19,8 @@ export default function UserProfile() {
   const [activeTab, setActiveTab] = useState('profile');
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedQRSubmission, setSelectedQRSubmission] = useState(null);
+  const [wasteAccount, setWasteAccount] = useState(null);
+  const [wasteAccountLoading, setWasteAccountLoading] = useState(false);
   
   // Helper function to safely render values (convert objects to strings)
   const safeRender = (value) => {
@@ -73,8 +75,9 @@ export default function UserProfile() {
         phone: contextUser.phone || "",
         email: contextUser.email || ""
       });
-      // Fetch waste submissions when user is loaded
+      // Fetch waste submissions and waste account when user is loaded
       fetchWasteSubmissions(contextUser.id || contextUser._id);
+      fetchWasteAccount(contextUser.id || contextUser._id);
     }
   }, [contextUser]);
 
@@ -98,6 +101,21 @@ export default function UserProfile() {
       setWasteSubmissions([]);
     } finally {
       setWasteLoading(false);
+    }
+  };
+
+  const fetchWasteAccount = async (userId) => {
+    if (!userId) return;
+    
+    setWasteAccountLoading(true);
+    try {
+      const account = await api.getWasteAccount(userId);
+      setWasteAccount(account);
+    } catch (err) {
+      console.error("Error fetching waste account:", err);
+      setWasteAccount(null);
+    } finally {
+      setWasteAccountLoading(false);
     }
   };
 
@@ -452,6 +470,26 @@ export default function UserProfile() {
                     </div>
                   </button>
                   <button
+                    onClick={() => setActiveTab('wasteAccount')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'wasteAccount'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Waste Account
+                      {wasteAccount && (
+                        <span className="ml-2 bg-green-100 text-green-600 text-xs font-medium px-2 py-1 rounded-full">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <button
                     onClick={() => setActiveTab('waste')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === 'waste'
@@ -677,6 +715,149 @@ export default function UserProfile() {
                 </div>
               )}
                 </div>
+              </div>
+            )}
+
+            {/* Waste Account Tab */}
+            {activeTab === 'wasteAccount' && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Waste Account</h2>
+                  <button
+                    onClick={() => fetchWasteAccount(user.id || user._id)}
+                    disabled={wasteAccountLoading}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex items-center gap-2"
+                  >
+                    <svg className={`w-4 h-4 ${wasteAccountLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
+
+                {wasteAccountLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                    <span className="ml-2 text-gray-600">Loading waste account...</span>
+                  </div>
+                ) : wasteAccount ? (
+                  <div className="space-y-6">
+                    {/* Account Information */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Account Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Account ID</h4>
+                          <p className="text-lg text-gray-900 font-mono">{wasteAccount.accountId}</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Account Status</h4>
+                          <p className="text-lg text-green-600 font-medium">Active</p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Created Date</h4>
+                          <p className="text-lg text-gray-900">
+                            {wasteAccount.createdAt ? new Date(wasteAccount.createdAt).toLocaleDateString() : "N/A"}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-gray-500 mb-1">Location</h4>
+                          <p className="text-lg text-gray-900">
+                            {wasteAccount.location?.city}, {wasteAccount.location?.country}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Location Details */}
+                    {wasteAccount.location && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Location Details</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-medium text-gray-500 mb-1">Address</h4>
+                            <p className="text-lg text-gray-900">{wasteAccount.location.address}</p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-medium text-gray-500 mb-1">City</h4>
+                            <p className="text-lg text-gray-900">{wasteAccount.location.city}</p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-medium text-gray-500 mb-1">Country</h4>
+                            <p className="text-lg text-gray-900">{wasteAccount.location.country}</p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-medium text-gray-500 mb-1">Coordinates</h4>
+                            <p className="text-lg text-gray-900 font-mono text-sm">
+                              {wasteAccount.location.latitude.toFixed(6)}, {wasteAccount.location.longitude.toFixed(6)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* QR Code */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Account QR Code</h3>
+                      <div className="text-center">
+                        <p className="text-gray-600 text-sm mb-4">Scan this QR code to access your waste account</p>
+                        
+                        {wasteAccount.qrCode ? (
+                          <div className="flex justify-center mb-6">
+                            <div className="bg-white p-4 rounded-lg shadow-sm border">
+                              <img 
+                                src={`data:image/png;base64,${wasteAccount.qrCode}`} 
+                                alt="Waste Account QR Code"
+                                className="w-48 h-48 mx-auto"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                            <div className="text-gray-500">
+                              <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <p>QR Code not available</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <button
+                          onClick={() => {
+                            if (wasteAccount.qrCode) {
+                              const link = document.createElement('a');
+                              link.href = `data:image/png;base64,${wasteAccount.qrCode}`;
+                              link.download = `waste-account-qr-${wasteAccount.accountId}.png`;
+                              link.click();
+                            }
+                          }}
+                          disabled={!wasteAccount.qrCode}
+                          className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm flex items-center gap-2 mx-auto"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download QR Code
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-8 text-center">
+                    <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Waste Account Found</h3>
+                    <p className="text-gray-600 mb-4">You haven't created a waste account yet. Complete your registration to create one.</p>
+                    <button
+                      onClick={() => navigate("/users/register/step3")}
+                      className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200"
+                    >
+                      Create Waste Account
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

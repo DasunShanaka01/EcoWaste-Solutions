@@ -43,6 +43,26 @@ const api = {
     return res.data;
   },
 
+  registerStep3: async (userId, data) => {
+    const res = await axios.post(`${API_URL}/register/step3/${userId}`, data, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
+
+  getWasteAccount: async (userId) => {
+    const res = await axios.get(`${API_URL}/waste-account/${userId}`, { 
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    return res.data;
+  },
+
   login: async (data) => {
     const res = await axios.post(`${API_URL}/login`, data, { 
       withCredentials: true,

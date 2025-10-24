@@ -38,7 +38,7 @@ export default function RegisterStep2() {
       }
 
       await api.registerStep2(user.id, { email: user.email, password });
-      navigate("/users/login");
+      navigate("/users/register/step3");
     } catch (err) {
       console.error("Registration error:", err);
       const errorMessage = err.response?.data?.message || err.response?.data || err.message || "Registration failed";
