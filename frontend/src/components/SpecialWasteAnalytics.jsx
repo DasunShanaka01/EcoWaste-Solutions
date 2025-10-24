@@ -82,8 +82,10 @@ class SpecialWasteAnalyticsAPI {
       const filename = this.getFilenameFromResponse(response) || 
                       `special_waste_${chartType}_report.${format.toLowerCase()}`;
       
-      // Create download
+      // Create download or open in browser
       const blob = await response.blob();
+      
+      // Always download PDF format as file
       this.downloadBlob(blob, filename);
       
       return { success: true, filename };
@@ -112,6 +114,22 @@ class SpecialWasteAnalyticsAPI {
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
+  }
+
+  openBlobInNewTab(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const newTab = window.open(url, '_blank');
+    
+    // Clean up the URL after a short delay to allow the browser to load it
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+    
+    // If popup blocker prevented opening, fallback to download
+    if (!newTab) {
+      console.warn('Popup blocked, falling back to download');
+      this.downloadBlob(blob, filename);
+    }
   }
 }
 

@@ -3,6 +3,7 @@ package com.example.backend.controller;
 import com.example.backend.dto.report.ReportData;
 import com.example.backend.dto.report.ReportParameters;
 import com.example.backend.service.report.ReportGenerationService;
+import com.example.backend.service.report.formatter.ReportFormatter;
 import com.example.backend.service.report.exporter.ExportResult;
 import com.example.backend.service.EmailService;
 import com.example.backend.repository.SpecialCollectionRepository;
@@ -69,25 +70,45 @@ public class SolidReportController {
             @PathVariable String format,
             @RequestBody ReportParameters parameters) {
         try {
+            System.out.println("=== DOWNLOAD REQUEST ===");
+            System.out.println("Category: " + category);
+            System.out.println("Chart Type: " + chartType);
+            System.out.println("Format: " + format);
+            System.out.println("Parameters: " + parameters);
+
             // Generate report data
             ReportData reportData = reportGenerationService.generateReport(category, chartType, parameters);
+            System.out.println("Report data generated successfully");
 
             // Format report
             byte[] formattedData = reportGenerationService.formatReport(reportData, format);
+            System.out.println("Report formatted successfully. Size: " + formattedData.length + " bytes");
+
+            // Get formatter to use its content type and file extension
+            ReportFormatter formatter = reportGenerationService.getFormatter(format);
 
             // Prepare response headers
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(getMediaType(format));
+            headers.setContentType(MediaType.parseMediaType(formatter.getContentType()));
+
+            // Force download for all files
             headers.setContentDispositionFormData("attachment",
-                    generateFilename(reportData, format));
+                    generateFilenameFromFormatter(reportData, formatter));
+
+            System.out.println("Content-Type: " + formatter.getContentType());
+            System.out.println("Filename: " + generateFilenameFromFormatter(reportData, formatter));
 
             return ResponseEntity.ok()
                     .headers(headers)
                     .body(formattedData);
 
         } catch (IllegalArgumentException e) {
+            System.err.println("Bad request error: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
+            System.err.println("Internal server error: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -117,6 +138,9 @@ public class SolidReportController {
     /**
      * Get available report categories
      */
+
+
+     
     @GetMapping("/categories")
     public ResponseEntity<List<String>> getAvailableCategories() {
         try {
@@ -478,6 +502,7 @@ public class SolidReportController {
             case "PDF" -> MediaType.APPLICATION_PDF;
             case "JSON" -> MediaType.APPLICATION_JSON;
             case "EXCEL" -> MediaType.valueOf("application/vnd.ms-excel");
+            case "CSV" -> MediaType.valueOf("text/csv");
             default -> MediaType.TEXT_PLAIN;
         };
     }
@@ -489,11 +514,19 @@ public class SolidReportController {
         String extension = switch (format.toUpperCase()) {
             case "PDF" -> ".pdf";
             case "JSON" -> ".json";
-            case "EXCEL" -> ".xlsx";
+            case "EXCEL" -> ".xls";
+            case "CSV" -> ".csv";
             default -> ".txt";
         };
 
         return sanitizedTitle + "_" + reportData.getChartType() + extension;
+    }
+
+    private String generateFilenameFromFormatter(ReportData reportData, ReportFormatter formatter) {
+        String sanitizedTitle = reportData.getTitle()
+                .replaceAll("[^a-zA-Z0-9.-]", "_");
+
+        return sanitizedTitle + "_" + reportData.getChartType() + formatter.getFileExtension();
     }
 
     /**

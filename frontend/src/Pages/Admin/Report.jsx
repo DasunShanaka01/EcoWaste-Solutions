@@ -11,7 +11,7 @@ const Report = () => {
     region: '',
     department: ''
   });
-  const [selectedFormat, setSelectedFormat] = useState('PDF');
+  const [selectedFormat, setSelectedFormat] = useState('TXT');
   const [reportPreview, setReportPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState('actual'); // 'actual' or 'sample'
@@ -140,7 +140,7 @@ const Report = () => {
     setLoading(true);
     try {
       // Fetch actual data from Special Waste Analytics API
-      const actualResponse = await fetch(`http://localhost:8080/api/reports/solid/special-waste/actual/${template.chartType}`, {
+      const actualResponse = await fetch(`http://localhost:8080/api/reports/solid/generate/Special Waste Analytics/${template.chartType}`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -149,9 +149,8 @@ const Report = () => {
         body: JSON.stringify({
           startDate: reportParameters.startDate || '2024-01-01',
           endDate: reportParameters.endDate || '2024-12-31',
-          wasteTypes: [], // Empty means all types
-          includeItems: template.chartType === 'bar',
-          groupByDate: true // Show waste type distribution based on date
+          format: 'JSON',
+          includeSampleData: false
         })
       });
 
@@ -159,24 +158,24 @@ const Report = () => {
       if (actualResponse.ok) {
         const apiResult = await actualResponse.json();
         actualData = {
-          chartData: apiResult.data.map(item => ({
+          chartData: apiResult.chartData.map(item => ({
             period: item.label,
             value: item.value,
             color: item.color || (template.chartType === 'pie' ? getPieChartColor(item.label) : getBarChartColor())
           })),
           data: {
-            totalItems: apiResult.data.length,
-            totalFee: apiResult.data.reduce((sum, item) => sum + (item.value || 0), 0),
-            categories: apiResult.data.map(item => item.label)
+            totalItems: apiResult.chartData.length,
+            totalQuantity: apiResult.chartData.reduce((sum, item) => sum + (item.value || 0), 0),
+            categories: apiResult.chartData.map(item => item.label)
           },
           stats: {
-            totalCategories: apiResult.data.length,
-            totalFee: `$${apiResult.data.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(2)}`,
-            largestCategory: apiResult.data.reduce((max, item) => item.value > max.value ? item : max, apiResult.data[0])?.label || 'N/A'
+            totalCategories: apiResult.chartData.length,
+            totalQuantity: `${apiResult.chartData.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(1)} kg`,
+            largestCategory: apiResult.chartData.reduce((max, item) => item.value > max.value ? item : max, apiResult.chartData[0])?.label || 'N/A'
           },
           description: template.chartType === 'pie' 
-            ? 'Special waste collection by date showing dominant waste types per day'
-            : 'Daily special waste collection amounts from database'
+            ? 'Special waste collection by category showing quantity distribution'
+            : 'Special waste quantities by category from database'
         };
       } else {
         // Fallback to sample data if API fails
@@ -212,12 +211,12 @@ const Report = () => {
   // Helper functions for Special Waste Analytics
   const getPieChartColor = (category) => {
     const colorMap = {
-      'Garden': '#22c55e',
-      'Bulky': '#3b82f6', 
-      'E-Waste': '#ef4444',
-      'Hazardous': '#dc2626',
-      'Electronics': '#8b5cf6',
-      'Furniture': '#f59e0b'
+      'Bulky': '#3b82f6',     // Blue
+      'Hazardous': '#ef4444', // Red
+      'Organic': '#22c55e',   // Green
+      'E-Waste': '#8b5cf6',   // Purple
+      'Recyclable': '#06b6d4', // Cyan
+      'Other': '#f59e0b'      // Amber
     };
     return colorMap[category] || '#6b7280';
   };
@@ -227,46 +226,48 @@ const Report = () => {
   const generateSpecialWastePieSampleData = () => {
     return {
       chartData: [
-        { period: '2024-10-20 (Garden)', value: 420.50, color: '#22c55e' },
-        { period: '2024-10-21 (Bulky)', value: 650.75, color: '#3b82f6' },
-        { period: '2024-10-22 (E-Waste)', value: 320.25, color: '#ef4444' },
-        { period: '2024-10-23 (Hazardous)', value: 180.80, color: '#dc2626' }
+        { period: 'Organic', value: 45.5, color: '#22c55e' },
+        { period: 'Bulky', value: 78.2, color: '#3b82f6' },
+        { period: 'E-Waste', value: 23.8, color: '#8b5cf6' },
+        { period: 'Hazardous', value: 12.3, color: '#ef4444' },
+        { period: 'Recyclable', value: 56.7, color: '#06b6d4' },
+        { period: 'Other', value: 18.9, color: '#f59e0b' }
       ],
       data: {
-        totalDates: 4,
-        totalFee: 1572.30,
-        dateRange: ['2024-10-20', '2024-10-21', '2024-10-22', '2024-10-23']
+        totalCategories: 6,
+        totalQuantity: 235.4,
+        categories: ['Organic', 'Bulky', 'E-Waste', 'Hazardous', 'Recyclable', 'Other']
       },
       stats: {
-        totalDates: 4,
-        totalFee: '$1,572.30',
-        peakDate: '2024-10-21 (Bulky Items)'
+        totalCategories: 6,
+        totalQuantity: '235.4 kg',
+        largestCategory: 'Bulky'
       },
-      description: 'Special waste collection by date showing dominant waste types per day'
+      description: 'Special waste collection by category showing quantity distribution'
     };
   };
 
   const generateSpecialWasteBarSampleData = () => {
     return {
       chartData: [
-        { period: '2024-10-18', value: 125.50, color: '#3b82f6' },
-        { period: '2024-10-19', value: 98.75, color: '#3b82f6' },
-        { period: '2024-10-20', value: 154.20, color: '#3b82f6' },
-        { period: '2024-10-21', value: 203.80, color: '#3b82f6' },
-        { period: '2024-10-22', value: 87.40, color: '#3b82f6' },
-        { period: '2024-10-23', value: 165.15, color: '#3b82f6' }
+        { period: 'Bulky', value: 78.2, color: '#3b82f6' },
+        { period: 'E-Waste', value: 23.8, color: '#8b5cf6' },
+        { period: 'Hazardous', value: 12.3, color: '#ef4444' },
+        { period: 'Organic', value: 45.5, color: '#22c55e' },
+        { period: 'Other', value: 18.9, color: '#f59e0b' },
+        { period: 'Recyclable', value: 56.7, color: '#06b6d4' }
       ],
       data: {
-        totalDates: 6,
-        totalFee: 834.80,
-        dateRange: ['2024-10-18', '2024-10-19', '2024-10-20', '2024-10-21', '2024-10-22', '2024-10-23']
+        totalCategories: 6,
+        totalQuantity: 235.4,
+        categories: ['Bulky', 'E-Waste', 'Hazardous', 'Organic', 'Other', 'Recyclable']
       },
       stats: {
-        totalDates: 6,
-        totalFee: '$834.80',
-        averageFee: '$139.13'
+        totalCategories: 6,
+        totalQuantity: '235.4 kg',
+        averageQuantity: '39.2 kg'
       },
-      description: 'Daily special waste collection amounts showing collection fees by date'
+      description: 'Special waste quantities by category showing collection amounts'
     };
   };
 
@@ -711,7 +712,6 @@ const Report = () => {
   };
 
   const generateSpecialWasteReport = async () => {
-    // Original implementation
     setLoading(true);
     try {
       const chartType = selectedTemplate.chartType || 'pie';
@@ -719,10 +719,8 @@ const Report = () => {
       const requestBody = {
         startDate: reportParameters.startDate || '2024-01-01',
         endDate: reportParameters.endDate || '2024-12-31',
-        wasteTypes: [], // Empty means all types
-        includeItems: chartType === 'bar',
         format: selectedFormat || 'JSON',
-        groupByDate: true // Show waste type distribution based on date
+        includeSampleData: false // Use real data from database
       };
 
       const endpoint = `/api/reports/solid/generate/Special Waste Analytics/${chartType}`;
@@ -755,17 +753,17 @@ const Report = () => {
             chartData: chartData,
             data: {
               totalItems: report.chartData.length,
-              totalFee: report.chartData.reduce((sum, item) => sum + (item.value || 0), 0),
+              totalQuantity: report.chartData.reduce((sum, item) => sum + (item.value || 0), 0),
               categories: report.chartData.map(item => item.label)
             },
             stats: report.statistics || {
               totalCategories: report.chartData.length,
-              totalFee: `$${report.chartData.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(2)}`,
+              totalQuantity: `${report.chartData.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(1)} kg`,
               largestCategory: report.chartData.reduce((max, item) => item.value > max.value ? item : max, report.chartData[0])?.label || 'N/A'
             },
             description: report.description || (chartType === 'pie' 
-              ? 'Special waste collection by date showing dominant waste types per day'
-              : 'Daily special waste collection amounts from database')
+              ? 'Special waste collection by category showing quantity distribution'
+              : 'Special waste quantities by category from database')
           },
           summary: `Special waste report generated successfully on ${new Date().toLocaleString()}`,
           reportData: report
@@ -783,212 +781,9 @@ const Report = () => {
     }
   };
 
-  const generateSpecialWasteReportDebug = async () => {
-    setLoading(true);
-    try {
-      const chartType = selectedTemplate.chartType || 'pie';
-      
-      // Test the debug endpoint first
-      console.log('Testing debug endpoint...');
-      
-      // Step 1: Test if backend is responding
-      console.log('Step 1: Testing backend ping...');
-      const pingResponse = await fetch(`http://localhost:8080/api/reports/solid/ping`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (!pingResponse.ok) {
-        console.error('Backend not responding:', pingResponse.status);
-        alert(`Backend not responding. Status: ${pingResponse.status}. Please start the backend server.`);
-        return;
-      }
-      
-      const pingResult = await pingResponse.json();
-      console.log('Ping result:', pingResult);
-      
-      // Step 2: Test report service injection
-      console.log('Step 2: Testing report service...');
-      const serviceResponse = await fetch(`http://localhost:8080/api/reports/solid/test-service`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (!serviceResponse.ok) {
-        const errorText = await serviceResponse.text();
-        console.error('Service test failed:', serviceResponse.status, errorText);
-        alert(`Service test failed. Status: ${serviceResponse.status}. Error: ${errorText}`);
-        return;
-      }
-      
-      const serviceResult = await serviceResponse.json();
-      console.log('Service test result:', serviceResult);
-      
-      // Step 3: Test sample-only endpoint (no database access)
-      console.log('Step 3: Testing sample-only generation...');
-      const sampleOnlyResponse = await fetch(`http://localhost:8080/api/reports/solid/special-waste/sample-only/${chartType}`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (sampleOnlyResponse.ok) {
-        const sampleResult = await sampleOnlyResponse.json();
-        console.log('Sample-only test result:', sampleResult);
-        console.log(`All basic tests passed! Sample generation works. Chart data points: ${sampleResult.chartDataSize}`);
-        
-        // Step 4: Test database connectivity
-        console.log('Step 4: Testing database connectivity...');
-        const dbTestResponse = await fetch(`http://localhost:8080/api/reports/solid/test-database`, {
-          method: 'GET',
-          credentials: 'include',
-        });
-        
-        if (dbTestResponse.ok) {
-          const dbResult = await dbTestResponse.json();
-          console.log('Database test result:', dbResult);
-          console.log(`Database test passed! Records found: ${dbResult.recordCount}`);
-          
-          // Step 5: Test actual special waste generation with database data
-          console.log('Step 5: Testing actual special waste generation with database data...');
-          const actualGenResponse = await fetch(`http://localhost:8080/api/reports/solid/test-actual-generation/${chartType}`, {
-            method: 'GET',
-            credentials: 'include',
-          });
-          
-          if (actualGenResponse.ok) {
-            const actualResult = await actualGenResponse.json();
-            console.log('Actual generation test result:', actualResult);
-            alert(`SUCCESS! All tests passed including actual generation! Chart data points: ${actualResult.chartDataSize}`);
-          } else {
-            const actualErrorText = await actualGenResponse.text();
-            console.error('Actual generation test failed:', actualGenResponse.status, actualErrorText);
-            alert(`FOUND THE ISSUE! Actual generation failed. Status: ${actualGenResponse.status}. This is the exact cause of the 500 error.`);
-            
-            // Try to parse the error for more details
-            try {
-              const actualErrorJson = JSON.parse(actualErrorText);
-              console.error('Actual generation error details:', actualErrorJson);
-              alert(`Root cause found: ${actualErrorJson.errorType}: ${actualErrorJson.message}`);
-            } catch (e) {
-              console.error('Raw actual generation error:', actualErrorText);
-            }
-          }
-        } else {
-          const dbErrorText = await dbTestResponse.text();
-          console.error('Database test failed:', dbTestResponse.status, dbErrorText);
-          alert(`Database test failed. Status: ${dbTestResponse.status}. This is the root cause of the 500 error.`);
-          
-          // Try to parse the error for more details
-          try {
-            const dbErrorJson = JSON.parse(dbErrorText);
-            console.error('Database error details:', dbErrorJson);
-            alert(`Database error details: ${dbErrorJson.message}`);
-          } catch (e) {
-            console.error('Raw database error:', dbErrorText);
-          }
-        }
-        return;
-      } else {
-        const errorText = await sampleOnlyResponse.text();
-        console.error('Sample-only test failed:', sampleOnlyResponse.status, errorText);
-        alert(`Sample-only test failed. Status: ${sampleOnlyResponse.status}. This indicates the core issue.`);
-        
-        // Try to parse the error for more details
-        try {
-          const errorJson = JSON.parse(errorText);
-          console.error('Error details:', errorJson);
-          alert(`Detailed error: ${errorJson.type}: ${errorJson.message}`);
-        } catch (e) {
-          // Not JSON, just show the text
-          console.error('Raw error:', errorText);
-        }
-        return;
-      }
-      
-      // If we get here, all basic tests passed, so we can try the database test
-      // For now, we'll skip the database test since sample data is working
-      console.log('All tests passed - special waste generation is working with sample data');
-      
-    } catch (error) {
-      console.error('Error in debug tests:', error);
-      alert('Error in debug tests: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const generateSpecialWasteReportOriginal = async () => {
-    // Original implementation
-    setLoading(true);
-    try {
-      const chartType = selectedTemplate.chartType || 'pie';
-      const endpoint = `/api/reports/solid/special-waste/${chartType}`;
 
-      const requestBody = {
-        startDate: reportParameters.startDate || '2024-01-01',
-        endDate: reportParameters.endDate || '2024-12-31',
-        wasteTypes: [], // Empty means all types
-        includeItems: chartType === 'bar',
-        format: selectedFormat || 'JSON',
-        groupByDate: true // Show waste type distribution based on date
-      };
 
-      const response = await fetch(`http://localhost:8080${endpoint}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (response.ok) {
-        const report = await response.json();
-        console.log('Special waste report response:', report);
-        alert(`Special waste report generated successfully!`);
-        
-        // Update preview with the generated report data
-        const chartData = report.chartData.map(item => ({
-          period: item.label,
-          value: item.value,
-          color: item.color || (chartType === 'pie' ? getPieChartColor(item.label) : getBarChartColor())
-        }));
-
-        setReportPreview({
-          title: report.title || selectedTemplate.name,
-          chartType: chartType,
-          reportId: report.reportId,
-          actualData: {
-            chartData: chartData,
-            data: {
-              totalItems: report.chartData.length,
-              totalFee: report.chartData.reduce((sum, item) => sum + (item.value || 0), 0),
-              categories: report.chartData.map(item => item.label)
-            },
-            stats: report.statistics || {
-              totalCategories: report.chartData.length,
-              totalFee: `$${report.chartData.reduce((sum, item) => sum + (item.value || 0), 0).toFixed(2)}`,
-              largestCategory: report.chartData.reduce((max, item) => item.value > max.value ? item : max, report.chartData[0])?.label || 'N/A'
-            },
-            description: report.description || (chartType === 'pie' 
-              ? 'Special waste collection by date showing dominant waste types per day'
-              : 'Daily special waste collection amounts from database')
-          },
-          summary: `Special waste report generated successfully on ${new Date().toLocaleString()}`,
-          reportData: report
-        });
-      } else {
-        const errorText = await response.text();
-        console.error('Error response:', response.status, errorText);
-        alert(`Failed to generate special waste report. Status: ${response.status}. Please try again.`);
-      }
-    } catch (error) {
-      console.error('Error generating special waste report:', error);
-      alert('Error generating report. Please check your connection and try again.\nError: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const downloadReport = async (format) => {
     if (!reportPreview?.reportId) {
@@ -1727,11 +1522,12 @@ const Report = () => {
                             <div className="space-y-3">
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Output Format</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-4 gap-2">
                                   {[
                                     { format: 'PDF', icon: '📄', color: 'red' },
                                     { format: 'Excel', icon: '📊', color: 'green' },
-                                    { format: 'CSV', icon: '📋', color: 'blue' }
+                                    { format: 'CSV', icon: '📋', color: 'blue' },
+                                    { format: 'TXT', icon: '📝', color: 'gray' }
                                   ].map(({ format, icon, color }) => (
                                     <button
                                       key={format}
@@ -1852,8 +1648,8 @@ const Report = () => {
                           {/* Render different chart types based on selectedTemplate.chartType */}
                           {selectedTemplate?.chartType === 'pie' ? (
                             /* Pie Chart */
-                            <div className="relative h-64 flex items-center justify-center">
-                              <div className="relative w-48 h-48">
+                            <div className="relative h-96 flex items-center justify-center">
+                              <div className="relative w-72 h-72">
                                 <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
                                   {currentData?.chartData?.map((item, index) => {
                                     const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
@@ -1884,27 +1680,27 @@ const Report = () => {
                                 {/* Center Label */}
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="text-center">
-                                    <div className="text-lg font-bold text-gray-800">
+                                    <div className="text-2xl font-bold text-gray-800">
                                       {currentData?.chartData?.reduce((sum, item) => sum + item.value, 0) || 0}
                                     </div>
-                                    <div className="text-xs text-gray-500">Total kg</div>
+                                    <div className="text-sm text-gray-500">Total kg</div>
                                   </div>
                                 </div>
                               </div>
                               
                               {/* Legend */}
-                              <div className="absolute right-0 top-0 space-y-2 max-w-xs">
+                              <div className="absolute right-0 top-0 space-y-3 max-w-xs">
                                 {currentData?.chartData?.map((item, index) => {
                                   const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
                                   const percentage = ((item.value / total) * 100).toFixed(1);
                                   return (
-                                    <div key={index} className="flex items-center gap-2 text-sm bg-white bg-opacity-80 rounded px-2 py-1">
+                                    <div key={index} className="flex items-center gap-3 text-sm bg-white bg-opacity-90 rounded-lg px-3 py-2 shadow-sm border border-gray-100">
                                       <div 
-                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                        className="w-4 h-4 rounded-full flex-shrink-0"
                                         style={{ backgroundColor: item.color || `hsl(${index * 60}, 70%, 50%)` }}
                                       ></div>
                                       <div className="flex flex-col">
-                                        <span className="text-gray-700 font-medium text-xs">{item.period}</span>
+                                        <span className="text-gray-700 font-medium text-sm">{item.period}</span>
                                         <span className="text-gray-500 text-xs">{item.value} kg ({percentage}%)</span>
                                       </div>
                                     </div>
@@ -1914,8 +1710,8 @@ const Report = () => {
                             </div>
                           ) : selectedTemplate?.chartType === 'donut' ? (
                             /* Donut Chart */
-                            <div className="relative h-64 flex items-center justify-center">
-                              <div className="relative w-48 h-48">
+                            <div className="relative h-96 flex items-center justify-center">
+                              <div className="relative w-72 h-72">
                                 <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
                                   {currentData?.chartData?.map((item, index) => {
                                     const total = currentData.chartData.reduce((sum, d) => sum + d.value, 0);
@@ -1985,7 +1781,7 @@ const Report = () => {
 
                           ) : (
                             /* Default Bar Chart */
-                            <div className="relative h-48 bg-gradient-to-t from-gray-50 to-white rounded-lg border border-gray-100">
+                            <div className="relative h-80 bg-gradient-to-t from-gray-50 to-white rounded-lg border border-gray-100">
                               <div className="flex items-end justify-around h-full p-4">
                                 {currentData?.chartData?.slice(0, 8).map((item, index) => {
                                   const maxValue = Math.max(...(currentData?.chartData?.map(d => d.value) || [0]));
@@ -1994,15 +1790,15 @@ const Report = () => {
                                     <div key={index} className="flex flex-col items-center group">
                                       <div className="relative mb-2">
                                         <div
-                                          className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg min-w-[24px] transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 shadow-sm"
-                                          style={{ height: `${Math.max(height, 5)}%` }}
+                                          className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg min-w-[40px] w-12 transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 shadow-md"
+                                          style={{ height: `${Math.max(height, 8)}px`, minHeight: '8px' }}
                                         ></div>
-                                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                                        <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-sm py-2 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 shadow-lg">
                                           {item.value} kg
                                         </div>
                                       </div>
-                                      <span className="text-xs text-gray-600 text-center leading-tight max-w-[60px] transform group-hover:text-blue-600 transition-colors">
-                                        {item.period?.length > 8 ? item.period.substring(0, 8) + '...' : item.period}
+                                      <span className="text-sm text-gray-600 text-center leading-tight max-w-[80px] transform group-hover:text-blue-600 transition-colors font-medium">
+                                        {item.period?.length > 10 ? item.period.substring(0, 10) + '...' : item.period}
                                       </span>
                                     </div>
                                   );
@@ -2021,20 +1817,20 @@ const Report = () => {
                               </div>
                               
                               {/* Y-axis labels for Bar Chart */}
-                              <div className="absolute left-0 top-0 bottom-0 -ml-12 flex flex-col justify-between text-xs text-gray-500 py-4">
-                                <span>{Math.max(...(currentData?.chartData?.map(d => d.value) || [0]))} kg</span>
+                              <div className="absolute left-0 top-0 bottom-0 -ml-16 flex flex-col justify-between text-sm text-gray-500 py-4">
+                                <span className="font-medium">{Math.max(...(currentData?.chartData?.map(d => d.value) || [0])).toFixed(1)} kg</span>
                                 <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.75)} kg</span>
                                 <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.5)} kg</span>
                                 <span>{Math.round(Math.max(...(currentData?.chartData?.map(d => d.value) || [0])) * 0.25)} kg</span>
-                                <span>0 kg</span>
+                                <span className="font-medium">0 kg</span>
                               </div>
                               
                               {/* Axis Labels */}
-                              <div className="absolute -left-16 top-1/2 -rotate-90 text-xs font-medium text-gray-600 whitespace-nowrap">
+                              <div className="absolute -left-20 top-1/2 -rotate-90 text-sm font-medium text-gray-700 whitespace-nowrap">
                                 Waste Amount (kg)
                               </div>
-                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-6 text-xs font-medium text-gray-600">
-                                Collection Date
+                              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-8 text-sm font-medium text-gray-700">
+                                Waste Category
                               </div>
                             </div>
                           )}

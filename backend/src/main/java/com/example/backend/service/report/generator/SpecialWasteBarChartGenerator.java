@@ -23,15 +23,15 @@ public class SpecialWasteBarChartGenerator implements ReportDataGenerator {
     private static final String CHART_TYPE = "bar";
     private static final String BAR_COLOR = "#3b82f6"; // Default blue color for bars
 
-    // Colors for different waste categories
+    // Colors for different waste categories (updated to match actual categories)
     private static final Map<String, String> CATEGORY_COLORS = Map.of(
-            "Bulky", "#3b82f6",
-            "Hazardous", "#ef4444",
-            "Garden", "#22c55e",
-            "E-Waste", "#8b5cf6",
-            "Electronic", "#06b6d4",
-            "Furniture", "#f59e0b",
-            "Chemical", "#dc2626");
+            "Bulky", "#3b82f6", // Blue
+            "Hazardous", "#ef4444", // Red
+            "Organic", "#22c55e", // Green
+            "E-Waste", "#8b5cf6", // Purple
+            "Recyclable", "#06b6d4", // Cyan
+            "Other", "#f59e0b" // Amber
+    );
 
     @Autowired
     private SpecialCollectionRepository specialCollectionRepository;
@@ -95,14 +95,8 @@ public class SpecialWasteBarChartGenerator implements ReportDataGenerator {
             return generateSampleBarChartData(parameters);
         }
 
-        // Check if we should group by date or items
-        boolean groupByDate = parameters.getGroupByDate() != null ? parameters.getGroupByDate() : false;
-
-        if (groupByDate) {
-            return generateDateBasedBarChartData(collections);
-        } else {
-            return generateItemBasedBarChartData(collections);
-        }
+        // For bar chart, always show by category with quantity-based bar lengths
+        return generateCategoryBasedBarChartData(collections);
     }
 
     private List<ChartDataPoint> generateDateBasedBarChartData(List<SpecialCollection> collections) {
@@ -142,6 +136,57 @@ public class SpecialWasteBarChartGenerator implements ReportDataGenerator {
 
         // Sort by date
         chartData.sort((a, b) -> a.getLabel().compareTo(b.getLabel()));
+        return chartData;
+    }
+
+    private List<ChartDataPoint> generateCategoryBasedBarChartData(List<SpecialCollection> collections) {
+        System.out.println("Generating category-based bar chart data from " + collections.size() + " collections");
+
+        // Create a map to sum quantities for each category
+        Map<String, Integer> categoryQuantities = new HashMap<>();
+
+        // Initialize all categories with 0 to ensure they all appear as bars
+        String[] allCategories = { "Bulky", "Hazardous", "Organic", "E-Waste", "Recyclable", "Other" };
+        for (String category : allCategories) {
+            categoryQuantities.put(category, 0);
+        }
+
+        // Sum up quantities for each category from actual data
+        for (SpecialCollection collection : collections) {
+            String category = collection.getCategory();
+            int quantity = collection.getQuantity();
+
+            System.out.println("Processing collection - Category: " + category + ", Quantity: " + quantity);
+
+            // Add to existing quantity
+            categoryQuantities.put(category, categoryQuantities.getOrDefault(category, 0) + quantity);
+        }
+
+        List<ChartDataPoint> chartData = new ArrayList<>();
+
+        // Create bar chart points for each category (X-axis = category, Bar height =
+        // quantity)
+        for (Map.Entry<String, Integer> entry : categoryQuantities.entrySet()) {
+            String category = entry.getKey();
+            Integer totalQuantity = entry.getValue();
+
+            ChartDataPoint point = new ChartDataPoint();
+            point.setLabel(category); // X-axis label
+            point.setValue(totalQuantity.doubleValue()); // Bar height based on quantity
+            point.setColor(CATEGORY_COLORS.getOrDefault(category, "#6b7280"));
+            point.setCategory("Special Waste Category");
+
+            // Add additional info for tooltip/display
+            point.setPeriod(String.format("Total: %d items", totalQuantity));
+
+            chartData.add(point);
+            System.out.println("Created bar chart point - Category: " + category + ", Quantity: " + totalQuantity);
+        }
+
+        // Sort by category name for consistent display order
+        chartData.sort((a, b) -> a.getLabel().compareTo(b.getLabel()));
+
+        System.out.println("Generated " + chartData.size() + " chart points for bar chart");
         return chartData;
     }
 
@@ -196,20 +241,15 @@ public class SpecialWasteBarChartGenerator implements ReportDataGenerator {
     }
 
     private List<ChartDataPoint> generateSampleBarChartData(ReportParameters parameters) {
-        // Sample data representing different waste items with realistic fees
+        // Sample data showing categories with quantity-based bar heights (X-axis =
+        // category, Bar height = total quantity)
         List<ChartDataPoint> chartData = Arrays.asList(
-                createSampleDataPoint("Old Refrigerator", 85.0, "#3b82f6", "Bulky", "Qty: 12"),
-                createSampleDataPoint("Garden Waste", 75.0, "#22c55e", "Garden", "Qty: 28"),
-                createSampleDataPoint("Sofa", 65.0, "#f59e0b", "Furniture", "Qty: 15"),
-                createSampleDataPoint("Computer Monitor", 55.0, "#8b5cf6", "E-Waste", "Qty: 22"),
-                createSampleDataPoint("Paint Cans", 45.0, "#ef4444", "Hazardous", "Qty: 8"),
-                createSampleDataPoint("Tree Branches", 40.0, "#22c55e", "Garden", "Qty: 35"),
-                createSampleDataPoint("Old Mattress", 35.0, "#3b82f6", "Bulky", "Qty: 18"),
-                createSampleDataPoint("Printer", 30.0, "#8b5cf6", "E-Waste", "Qty: 14"),
-                createSampleDataPoint("Dining Table", 28.0, "#f59e0b", "Furniture", "Qty: 6"),
-                createSampleDataPoint("Battery Pack", 25.0, "#ef4444", "Hazardous", "Qty: 11"),
-                createSampleDataPoint("Lawn Mower", 22.0, "#22c55e", "Garden", "Qty: 5"),
-                createSampleDataPoint("Washing Machine", 20.0, "#3b82f6", "Bulky", "Qty: 7"));
+                createSampleDataPoint("Bulky", 45.0, "#3b82f6", "Special Waste Category", "Total: 45 items"),
+                createSampleDataPoint("E-Waste", 36.0, "#8b5cf6", "Special Waste Category", "Total: 36 items"),
+                createSampleDataPoint("Organic", 32.0, "#22c55e", "Special Waste Category", "Total: 32 items"),
+                createSampleDataPoint("Hazardous", 19.0, "#ef4444", "Special Waste Category", "Total: 19 items"),
+                createSampleDataPoint("Recyclable", 15.0, "#06b6d4", "Special Waste Category", "Total: 15 items"),
+                createSampleDataPoint("Other", 8.0, "#f59e0b", "Special Waste Category", "Total: 8 items"));
 
         return chartData;
     }

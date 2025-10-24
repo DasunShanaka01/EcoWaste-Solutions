@@ -22,15 +22,14 @@ public class SpecialWastePieChartGenerator implements ReportDataGenerator {
     private static final String CATEGORY = "Special Waste Analytics";
     private static final String CHART_TYPE = "pie";
 
-    // Special waste categories with colors
+    // Special waste categories with colors (updated to match actual categories)
     private static final Map<String, String> CATEGORY_COLORS = Map.of(
             "Bulky", "#3b82f6", // Blue
             "Hazardous", "#ef4444", // Red
-            "Garden", "#22c55e", // Green
+            "Organic", "#22c55e", // Green
             "E-Waste", "#8b5cf6", // Purple
-            "Electronic", "#06b6d4", // Cyan
-            "Furniture", "#f59e0b", // Amber
-            "Chemical", "#dc2626" // Dark Red
+            "Recyclable", "#06b6d4", // Cyan
+            "Other", "#f59e0b" // Amber
     );
 
     @Autowired
@@ -160,51 +159,65 @@ public class SpecialWastePieChartGenerator implements ReportDataGenerator {
     }
 
     private List<ChartDataPoint> generateCategoryBasedPieChartData(List<SpecialCollection> collections) {
-        // Group by category and calculate totals (original logic)
-        Map<String, List<SpecialCollection>> groupedByCategory = collections.stream()
-                .collect(Collectors.groupingBy(SpecialCollection::getCategory));
+        System.out.println("Generating category-based pie chart data from " + collections.size() + " collections");
+
+        // Create a map to sum quantities for each category
+        Map<String, Integer> categoryQuantities = new HashMap<>();
+
+        // Initialize all categories with 0 to ensure they all appear in the chart
+        String[] allCategories = { "Bulky", "Hazardous", "Organic", "E-Waste", "Recyclable", "Other" };
+        for (String category : allCategories) {
+            categoryQuantities.put(category, 0);
+        }
+
+        // Sum up quantities for each category from actual data
+        for (SpecialCollection collection : collections) {
+            String category = collection.getCategory();
+            int quantity = collection.getQuantity();
+
+            System.out.println("Processing collection - Category: " + category + ", Quantity: " + quantity);
+
+            // Add to existing quantity (this handles multiple collections of same category)
+            categoryQuantities.put(category, categoryQuantities.getOrDefault(category, 0) + quantity);
+        }
 
         List<ChartDataPoint> chartData = new ArrayList<>();
 
-        for (Map.Entry<String, List<SpecialCollection>> entry : groupedByCategory.entrySet()) {
+        // Create chart points for each category
+        for (Map.Entry<String, Integer> entry : categoryQuantities.entrySet()) {
             String category = entry.getKey();
-            List<SpecialCollection> categoryCollections = entry.getValue();
-
-            // Calculate total fee for this category
-            double totalFee = categoryCollections.stream()
-                    .mapToDouble(SpecialCollection::getFee)
-                    .sum();
-
-            // Count total collections
-            int totalCount = categoryCollections.size();
+            Integer totalQuantity = entry.getValue();
 
             ChartDataPoint point = new ChartDataPoint();
             point.setLabel(category);
-            point.setValue(totalFee);
+            point.setValue(totalQuantity.doubleValue()); // Convert to double for consistency
             point.setColor(CATEGORY_COLORS.getOrDefault(category, "#6b7280"));
             point.setCategory("Special Waste Category");
 
-            // Add additional info in period field for display
-            point.setPeriod(String.format("%d collections", totalCount));
+            // Add additional info showing total quantity
+            point.setPeriod(String.format("Total: %d items", totalQuantity));
 
             chartData.add(point);
+            System.out.println("Created chart point - Category: " + category + ", Quantity: " + totalQuantity);
         }
 
-        // Sort by value (descending)
+        // Sort by value (descending) - categories with higher quantities first
         chartData.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
 
+        System.out.println("Generated " + chartData.size() + " chart points for pie chart");
         return chartData;
     }
 
     private List<ChartDataPoint> generateSamplePieChartData(ReportParameters parameters) {
-        // Sample data for demonstration
+        // Sample data for demonstration - using correct categories and quantity-based
+        // values
         List<ChartDataPoint> chartData = Arrays.asList(
-                createSampleDataPoint("Bulky", 1250.0, "#3b82f6", "45 collections"),
-                createSampleDataPoint("Garden", 850.0, "#22c55e", "32 collections"),
-                createSampleDataPoint("E-Waste", 650.0, "#8b5cf6", "28 collections"),
-                createSampleDataPoint("Hazardous", 420.0, "#ef4444", "18 collections"),
-                createSampleDataPoint("Furniture", 380.0, "#f59e0b", "15 collections"),
-                createSampleDataPoint("Chemical", 180.0, "#dc2626", "8 collections"));
+                createSampleDataPoint("Bulky", 45.0, "#3b82f6", "Total: 45 items"),
+                createSampleDataPoint("Organic", 32.0, "#22c55e", "Total: 32 items"),
+                createSampleDataPoint("E-Waste", 28.0, "#8b5cf6", "Total: 28 items"),
+                createSampleDataPoint("Hazardous", 18.0, "#ef4444", "Total: 18 items"),
+                createSampleDataPoint("Recyclable", 15.0, "#06b6d4", "Total: 15 items"),
+                createSampleDataPoint("Other", 8.0, "#f59e0b", "Total: 8 items"));
 
         return chartData;
     }

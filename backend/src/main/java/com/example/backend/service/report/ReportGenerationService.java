@@ -81,6 +81,16 @@ public class ReportGenerationService {
     }
 
     /**
+     * Gets the formatter for the specified format
+     * 
+     * @param format The desired format (e.g., "PDF", "JSON", "EXCEL")
+     * @return ReportFormatter instance or null if not found
+     */
+    public ReportFormatter getFormatter(String format) {
+        return findFormatter(format);
+    }
+
+    /**
      * Exports a formatted report using the specified export type
      * 
      * @param reportData    The report data
