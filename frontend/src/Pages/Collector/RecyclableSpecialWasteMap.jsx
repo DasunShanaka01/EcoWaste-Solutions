@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
-// import scApi from '../../api/specialCollection';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import scApi from '../../api/specialCollection';
+import { QrReader } from 'react-qr-reader';
 
 const RecyclableSpecialWasteMap = () => {
   const navigate = useNavigate();
@@ -32,6 +32,12 @@ const RecyclableSpecialWasteMap = () => {
   const [showAll, setShowAll] = useState(false);
   const [filteredRecyclableMarkers, setFilteredRecyclableMarkers] = useState([]);
   const [filteredSpecialMarkers, setFilteredSpecialMarkers] = useState([]);
+  
+  // Dashboard stats states
+  const [stats, setStats] = useState(null);
+  const [searchId, setSearchId] = useState('');
+  const [searchResult, setSearchResult] = useState(null);
+  const [searching, setSearching] = useState(false);
 
   // Geocoding function
   const GEOCODE_KEY = "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk";
@@ -54,7 +60,6 @@ const RecyclableSpecialWasteMap = () => {
   // Fetch waste locations function
   const fetchWasteLocations = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
 
       // First, let's test if the API is working
@@ -217,25 +222,25 @@ const RecyclableSpecialWasteMap = () => {
       try {
         console.log('Fetching special collections from API...');
         
-        // Use the /mine endpoint which now returns all collections for collectors
-        console.log('Trying /api/special-collection/mine endpoint...');
-        const mineRes = await fetch('http://localhost:8081/api/special-collection/mine', { 
+        // Use the /map endpoint which returns collections for collectors (excluding collected ones)
+        console.log('Trying /api/special-collection/map endpoint...');
+        const mapRes = await fetch('http://localhost:8081/api/special-collection/map', { 
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
           }
         });
         
-        console.log('Mine endpoint response status:', mineRes.status);
+        console.log('Map endpoint response status:', mapRes.status);
         
         let specialList = [];
-        if (mineRes.ok) {
-          specialList = await mineRes.json();
-          console.log('Fetched special collections via mine endpoint:', specialList.length);
-          console.log('Mine special collections data:', specialList);
+        if (mapRes.ok) {
+          specialList = await mapRes.json();
+          console.log('Fetched special collections via map endpoint:', specialList.length);
+          console.log('Map special collections data:', specialList);
         } else {
-          const errorText = await mineRes.text();
-          console.log('Mine endpoint failed:', mineRes.status, errorText);
+          const errorText = await mapRes.text();
+          console.log('Map endpoint failed:', mapRes.status, errorText);
         }
         
         console.log('Special collections data:', specialList);
@@ -313,15 +318,79 @@ const RecyclableSpecialWasteMap = () => {
     } catch (err) {
       console.error('Error fetching waste locations:', err);
       setError('Failed to load collection data');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
+  // Load dashboard statistics
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await scApi.getDashboardStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Error loading dashboard stats:', err);
+    }
+  }, []);
+
+  // Search for collection by ID
+  const handleSearch = async () => {
+    if (!searchId.trim()) {
+      alert('Please enter a collection ID');
+      return;
+    }
+
+    setSearching(true);
+    setSearchResult(null);
+
+    try {
+      const data = await scApi.searchCollection(searchId);
+      setSearchResult(data);
+    } catch (err) {
+      console.error('Error searching collection:', err);
+      setSearchResult({
+        found: false,
+        message: 'Error searching for collection'
+      });
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Refresh all data
+  const refreshData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await Promise.all([
+        fetchWasteLocations(),
+        loadStats()
+      ]);
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      setError('Failed to refresh data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load recyclable and special waste collection locations from backend
   useEffect(() => {
-    fetchWasteLocations();
-  }, [fetchWasteLocations]);
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchWasteLocations(),
+          loadStats()
+        ]);
+      } catch (err) {
+        console.error('Error loading initial data:', err);
+        setError('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadInitialData();
+  }, [fetchWasteLocations, loadStats]);
 
   // Combine filtered markers for the map
   const allMarkers = [...filteredRecyclableMarkers, ...filteredSpecialMarkers];
@@ -408,6 +477,30 @@ const RecyclableSpecialWasteMap = () => {
     setUpdatingPayment(false);
   };
 
+  // Handle QR code detection from camera
+  const handleQRCodeDetected = (result, error) => {
+    console.log('QR detection result:', result);
+    console.log('QR detection error:', error);
+    
+    if (result && result.getText) {
+      const data = result.getText();
+      if (data && data.trim()) {
+        console.log('QR Code detected:', data);
+        setQrCodeInput(data);
+        setUseCamera(false); // Stop camera scanning
+        // Automatically process the detected QR code
+        setTimeout(() => {
+          handleQRScan();
+        }, 500);
+      }
+    }
+  };
+
+  // Handle camera errors
+  const handleCameraError = (error) => {
+    console.error('Camera error:', error);
+    setCameraError('Camera access denied or not available. Please use manual input instead.');
+  };
 
   // Start camera scanning
   const startCameraScan = () => {
@@ -442,9 +535,9 @@ const RecyclableSpecialWasteMap = () => {
       let data = await response.json();
       let isRecyclable = response.ok;
 
-      // If not found as recyclable, try special collection
+      // If not found as recyclable, try special collection search
       if (!response.ok) {
-        response = await fetch(`http://localhost:8081/api/special-collection/find/${manualIdInput}`, {
+        response = await fetch(`http://localhost:8081/api/special-collection/search/${manualIdInput}`, {
           method: 'GET',
           credentials: 'include',
           headers: {
@@ -458,12 +551,30 @@ const RecyclableSpecialWasteMap = () => {
       console.log('Manual search response:', data);
 
       if (response.ok) {
-        setManualSearchResult({ 
-          success: true, 
-          data: data,
-          isRecyclable: isRecyclable,
-          message: isRecyclable ? 'Recyclable waste found!' : 'Special collection found!'
-        });
+        if (isRecyclable) {
+          setManualSearchResult({ 
+            success: true, 
+            data: data,
+            isRecyclable: true,
+            message: 'Recyclable waste found!'
+          });
+        } else {
+          // Handle special collection search response
+          if (data.found) {
+            setManualSearchResult({ 
+              success: true, 
+              data: data.collection,
+              isRecyclable: false,
+              message: data.isCollected ? 'Special collection found (already collected)' : 'Special collection found!',
+              isCollected: data.isCollected
+            });
+          } else {
+            setManualSearchResult({ 
+              success: false, 
+              message: data.message || 'Collection not found' 
+            });
+          }
+        }
       } else {
         setManualSearchResult({ 
           success: false, 
@@ -745,10 +856,21 @@ const RecyclableSpecialWasteMap = () => {
                 Scan QR Code / Enter ID
               </button>
               <button
-                onClick={() => window.location.reload()}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200"
+                onClick={refreshData}
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Refresh Data
+                {loading ? (
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                {loading ? 'Refreshing...' : 'Refresh Data'}
               </button>
               <button
                 onClick={() => navigate('/collector/dashboard')}
@@ -811,7 +933,7 @@ const RecyclableSpecialWasteMap = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
@@ -865,7 +987,27 @@ const RecyclableSpecialWasteMap = () => {
                 <div className="ml-5 w-0 flex-1">
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 truncate">Total Collections</dt>
-                    <dd className="text-lg font-medium text-gray-900">{allMarkers.length}</dd>
+                    <dd className="text-lg font-medium text-gray-900">{stats?.totalCollections || 0}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-green-600 rounded-md flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Collected Today</dt>
+                    <dd className="text-lg font-medium text-gray-900">{stats?.collectedCollections || 0}</dd>
                   </dl>
                 </div>
               </div>
@@ -937,6 +1079,99 @@ const RecyclableSpecialWasteMap = () => {
               }))} 
             />
           </div>
+        </div>
+
+        {/* Collection Search */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Search Collection by ID</h3>
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+              placeholder="Enter 6-digit collection ID"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <button
+              onClick={handleSearch}
+              disabled={!searchId.trim() || searching}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {searching ? (
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              )}
+              {searching ? 'Searching...' : 'Search'}
+            </button>
+          </div>
+
+          {searchResult && (
+            <div className={`mt-4 p-4 rounded-lg border ${
+              searchResult.found 
+                ? searchResult.isCollected 
+                  ? 'bg-yellow-50 border-yellow-200' 
+                  : 'bg-green-50 border-green-200'
+                : 'bg-red-50 border-red-200'
+            }`}>
+              {searchResult.found ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <h4 className="font-semibold text-gray-900">Collection Found</h4>
+                    {searchResult.isCollected && (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                        Already Collected
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p><span className="font-medium text-gray-600">ID:</span> {searchResult.collection.id}</p>
+                      <p><span className="font-medium text-gray-600">Category:</span> {searchResult.collection.category}</p>
+                      <p><span className="font-medium text-gray-600">Items:</span> {searchResult.collection.items}</p>
+                      <p><span className="font-medium text-gray-600">Quantity:</span> {searchResult.collection.quantity}kg</p>
+                    </div>
+                    <div>
+                      <p><span className="font-medium text-gray-600">Fee:</span> LKR {searchResult.collection.fee}</p>
+                      <p><span className="font-medium text-gray-600">Status:</span> {searchResult.collection.status}</p>
+                      <p><span className="font-medium text-gray-600">Payment:</span> {searchResult.collection.paymentStatus}</p>
+                      <p><span className="font-medium text-gray-600">Date:</span> {searchResult.collection.date}</p>
+                    </div>
+                  </div>
+                  
+                  {searchResult.collection.instructions && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm"><span className="font-medium text-gray-600">Instructions:</span> {searchResult.collection.instructions}</p>
+                    </div>
+                  )}
+                  
+                  {searchResult.isCollected && (
+                    <div className="mt-3 p-3 bg-yellow-100 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        <strong>Note:</strong> This collection has already been collected and will not appear on the map.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <p className="text-red-800">{searchResult.message}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Collection Lists */}
@@ -1115,29 +1350,15 @@ const RecyclableSpecialWasteMap = () => {
                   </div>
                   
                   <div className="relative bg-gray-100 rounded-xl overflow-hidden">
-                    <Scanner
-                      onScan={(result) => {
-                        if (result) {
-                          console.log('QR Code detected:', result);
-                          setQrCodeInput(result);
-                          setUseCamera(false); // Stop camera scanning
-                          // Automatically process the detected QR code
-                          setTimeout(() => {
-                            handleQRScan();
-                          }, 500);
-                        }
-                      }}
-                      onError={(error) => {
-                        console.error('Camera error:', error);
-                        setCameraError('Camera access denied or not available. Please use manual input instead.');
-                      }}
+                    <QrReader
+                      delay={300}
+                      onError={handleCameraError}
+                      onResult={handleQRCodeDetected}
+                      style={{ width: '100%', height: '300px' }}
                       constraints={{
                         video: {
                           facingMode: 'environment'
                         }
-                      }}
-                      styles={{
-                        container: { width: '100%', height: '300px' }
                       }}
                     />
                     <div className="absolute inset-0 border-2 border-purple-500 rounded-xl pointer-events-none">
@@ -1280,13 +1501,19 @@ const RecyclableSpecialWasteMap = () => {
                           ) : (
                             <div className="space-y-2 text-sm">
                               <p><span className="font-medium">Type:</span> Special Collection</p>
-                              <p><span className="font-medium">Simple ID:</span> {manualSearchResult.data.simpleId}</p>
-                              <p><span className="font-medium">User:</span> {manualSearchResult.data.userName}</p>
+                              <p><span className="font-medium">ID:</span> {manualSearchResult.data.id}</p>
+                              <p><span className="font-medium">User ID:</span> {manualSearchResult.data.userId}</p>
                               <p><span className="font-medium">Category:</span> {manualSearchResult.data.category}</p>
                               <p><span className="font-medium">Items:</span> {manualSearchResult.data.items}</p>
                               <p><span className="font-medium">Quantity:</span> {manualSearchResult.data.quantity}kg</p>
                               <p><span className="font-medium">Fee:</span> LKR {manualSearchResult.data.fee}</p>
                               <p><span className="font-medium">Status:</span> {manualSearchResult.data.status}</p>
+                              <p><span className="font-medium">Payment Status:</span> {manualSearchResult.data.paymentStatus}</p>
+                              <p><span className="font-medium">Date:</span> {manualSearchResult.data.date}</p>
+                              <p><span className="font-medium">Time Slot:</span> {manualSearchResult.data.timeSlot}</p>
+                              {manualSearchResult.isCollected && (
+                                <p className="text-red-600 font-semibold">⚠️ This collection has already been collected!</p>
+                              )}
                             </div>
                           )}
                           
@@ -1336,7 +1563,7 @@ const RecyclableSpecialWasteMap = () => {
                                       // Step 2: Mark as Collected (only after payment is confirmed)
                                       <button
                                         onClick={() => updateCollectionStatus(
-                                          manualSearchResult.data.collectionId,
+                                          manualSearchResult.data.id,
                                           'Collected',
                                           false
                                         )}
@@ -1359,7 +1586,7 @@ const RecyclableSpecialWasteMap = () => {
                                   <>
                                     <button
                                       onClick={() => updateCollectionStatus(
-                                        manualSearchResult.data.collectionId,
+                                        manualSearchResult.data.id,
                                         'Collected',
                                         false
                                       )}
@@ -1371,7 +1598,7 @@ const RecyclableSpecialWasteMap = () => {
                                 )}
                                 <button
                                   onClick={() => updateCollectionStatus(
-                                    manualSearchResult.data.collectionId,
+                                    manualSearchResult.data.id,
                                     'Pending',
                                     false
                                   )}

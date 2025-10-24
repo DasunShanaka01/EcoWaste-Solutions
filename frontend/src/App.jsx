@@ -133,6 +133,7 @@ function AppContent() {
           }
         />
         
+        
         {/* Legacy waste collection route */}
         <Route path="/wastecollection" element={<WasteCollection />} />
       </Routes>
