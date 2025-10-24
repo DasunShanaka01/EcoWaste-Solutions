@@ -96,18 +96,20 @@ public class SpecialCollectionController {
         String userId = getUserIdFromCookie(request);
         System.out.println("User ID from cookie: " + userId);
         
-        // For collectors, always return all collections regardless of user ID
-        System.out.println("Returning all special collections for collectors");
-        List<SpecialCollection> allCollections = specialCollectionService.findAll();
-        System.out.println("Found " + allCollections.size() + " special collections for collectors");
+        if (userId == null) {
+            System.out.println("No user ID found in cookie");
+            return ResponseEntity.status(401).build();
+        }
         
-        // Filter out collections without coordinates for the map
-        List<SpecialCollection> collectionsWithCoordinates = allCollections.stream()
-            .filter(sc -> sc.getLatitude() != null && sc.getLongitude() != null)
-            .collect(Collectors.toList());
-        
-        System.out.println("Found " + collectionsWithCoordinates.size() + " collections with coordinates");
-        return ResponseEntity.ok(collectionsWithCoordinates);
+        try {
+            List<SpecialCollection> userCollections = specialCollectionService.listUserCollections(userId);
+            System.out.println("Found " + userCollections.size() + " collections for user: " + userId);
+            return ResponseEntity.ok(userCollections);
+        } catch (Exception e) {
+            System.out.println("Error getting user collections: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
     }
 
     @GetMapping("/all")
@@ -123,6 +125,125 @@ public class SpecialCollectionController {
             System.err.println("Error fetching all special collections: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @GetMapping("/map")
+    public ResponseEntity<List<SpecialCollection>> getCollectionsForMap(HttpServletRequest request) {
+        System.out.println("SpecialCollectionController.getCollectionsForMap() called");
+        String userId = getUserIdFromCookie(request);
+        System.out.println("User ID from cookie: " + userId);
+        
+        if (userId == null) {
+            System.out.println("No user ID found in cookie");
+            return ResponseEntity.status(401).build();
+        }
+        
+        try {
+            // Get all collections but filter out collected ones and those without coordinates
+            List<SpecialCollection> allCollections = specialCollectionService.findAll();
+            List<SpecialCollection> mapCollections = allCollections.stream()
+                .filter(sc -> sc.getLatitude() != null && sc.getLongitude() != null)
+                .filter(sc -> !"Collected".equalsIgnoreCase(sc.getStatus()) && 
+                             !"Completed".equalsIgnoreCase(sc.getStatus()))
+                .collect(Collectors.toList());
+            
+            System.out.println("Found " + mapCollections.size() + " collections for map (excluding collected)");
+            return ResponseEntity.ok(mapCollections);
+        } catch (Exception e) {
+            System.out.println("Error getting collections for map: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    @GetMapping("/dashboard/stats")
+    public ResponseEntity<Map<String, Object>> getDashboardStats(HttpServletRequest request) {
+        System.out.println("SpecialCollectionController.getDashboardStats() called");
+        String userId = getUserIdFromCookie(request);
+        System.out.println("User ID from cookie: " + userId);
+        
+        if (userId == null) {
+            System.out.println("No user ID found in cookie");
+            return ResponseEntity.status(401).build();
+        }
+        
+        try {
+            List<SpecialCollection> allCollections = specialCollectionService.findAll();
+            
+            // Count collections by status
+            long totalCollections = allCollections.size();
+            long collectedCollections = allCollections.stream()
+                .filter(sc -> "Collected".equalsIgnoreCase(sc.getStatus()) || "Completed".equalsIgnoreCase(sc.getStatus()))
+                .count();
+            long pendingCollections = allCollections.stream()
+                .filter(sc -> "Pending".equalsIgnoreCase(sc.getStatus()) || "Scheduled".equalsIgnoreCase(sc.getStatus()))
+                .count();
+            
+            // Group collected collections by date
+            Map<String, Long> collectedByDate = allCollections.stream()
+                .filter(sc -> "Collected".equalsIgnoreCase(sc.getStatus()) || "Completed".equalsIgnoreCase(sc.getStatus()))
+                .collect(Collectors.groupingBy(
+                    SpecialCollection::getDate,
+                    Collectors.counting()
+                ));
+            
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("totalCollections", totalCollections);
+            stats.put("collectedCollections", collectedCollections);
+            stats.put("pendingCollections", pendingCollections);
+            stats.put("collectedByDate", collectedByDate);
+            
+            System.out.println("Dashboard stats: " + stats);
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            System.out.println("Error getting dashboard stats: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    @GetMapping("/search/{collectionId}")
+    public ResponseEntity<Map<String, Object>> searchCollection(@PathVariable String collectionId, HttpServletRequest request) {
+        System.out.println("SpecialCollectionController.searchCollection() called with ID: " + collectionId);
+        String userId = getUserIdFromCookie(request);
+        System.out.println("User ID from cookie: " + userId);
+        
+        if (userId == null) {
+            System.out.println("No user ID found in cookie");
+            return ResponseEntity.status(401).build();
+        }
+        
+        try {
+            // Find collection by ID (assuming the ID is a 6-digit substring or full ID)
+            List<SpecialCollection> allCollections = specialCollectionService.findAll();
+            SpecialCollection foundCollection = allCollections.stream()
+                .filter(sc -> sc.getId() != null && (sc.getId().contains(collectionId) || sc.getId().equals(collectionId)))
+                .findFirst()
+                .orElse(null);
+            
+            if (foundCollection == null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("found", false);
+                response.put("message", "Collection not found");
+                return ResponseEntity.ok(response);
+            }
+            
+            boolean isCollected = "Collected".equalsIgnoreCase(foundCollection.getStatus()) || 
+                                  "Completed".equalsIgnoreCase(foundCollection.getStatus());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("found", true);
+            response.put("collection", foundCollection);
+            response.put("isCollected", isCollected);
+            response.put("message", isCollected ? "This collection has already been collected" : "Collection found");
+            
+            System.out.println("Collection search result: " + response);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.out.println("Error searching collection: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
         }
     }
 

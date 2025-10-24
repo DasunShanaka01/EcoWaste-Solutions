@@ -3,12 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import scApi from '../../api/specialCollection';
 
 const categories = [
-  { key: 'Bulky', items: ['Sofa', 'Refrigerator', 'Mattress', 'Table', 'Chair'], img: '/bulky.png' },
-  { key: 'Hazardous', items: ['Batteries', 'Paint', 'Chemicals'], img: '/hazardous.png' },
-  { key: 'Organic', items: ['Leaves', 'Branches bundle', 'Kitchen waste'], img: '/organic.png' },
-  { key: 'E-Waste', items: ['TV', 'Computer', 'Printer'], img: '/ewaste.png' },
-  { key: 'Recyclable', items: ['Plastic', 'Paper', 'Glass', 'Metal'], img: '/recycle.png' },
-  { key: 'Other', items: [], img: '/other.png' },
+  { key: 'Bulky', items: ['Sofa', 'Refrigerator', 'Mattress', 'Table', 'Chair'], img: 'https://media.istockphoto.com/id/2196163100/photo/trailer-with-bulky-waste-from-a-household-clearance.jpg?s=2048x2048&w=is&k=20&c=sxZXpRwI5g8rzQC3mhrqpqI69rZNq7yiXG8aWoji7uI=' },
+  { key: 'Hazardous', items: ['Batteries', 'Paint', 'Chemicals'], img: 'https://images.unsplash.com/photo-1591268285986-e6ad4dbf14f7?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=687' },
+  { key: 'Organic', items: ['Leaves', 'Branches bundle', 'Kitchen waste'], img: 'https://plus.unsplash.com/premium_photo-1723373960718-c26efde88d6d?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=688' },
+  { key: 'E-Waste', items: ['TV', 'Computer', 'Printer'], img: 'https://images.unsplash.com/photo-1612965110667-4175024b0dcc?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=735' },
+  { key: 'Recyclable', items: ['Plastic', 'Paper', 'Glass', 'Metal'], img: 'https://media.istockphoto.com/id/664980412/photo/trash-for-recycle-and-reduce-ecology-environment.jpg?s=2048x2048&w=is&k=20&c=9Rcwfkp-XgJMRo45m5irHEi2Xpi7szbhpET8m59nfKc=' },
+  { key: 'Other', items: [], img: 'https://media.istockphoto.com/id/2206222682/photo/waste-collection.jpg?s=2048x2048&w=is&k=20&c=cAj5HB_Qf8sDyYTzYy6aa_sSHGO54LaE97EX03xyWB0=' },
 ];
 
 const locations = ['Front door', 'Garage', 'Building lobby'];
@@ -329,8 +329,6 @@ export default function ScheduleSpecial() {
       }
       setPaid(true);
       next(); // go to confirmation
-      // navigate back to manage after short delay to show updated status
-      setTimeout(() => navigate('/special/manage'), 800);
     } catch (e) {
       alert('Payment failed');
     }
@@ -498,8 +496,8 @@ export default function ScheduleSpecial() {
                             : 'border-gray-300 hover:border-green-400'
                         }`}
                       >
-                        <div className="w-full h-24 bg-gray-100 rounded mb-3 flex items-center justify-center text-gray-400 text-sm relative">
-                          {c.img ? <img src={c.img} alt={c.key} className="max-h-20" /> : c.key}
+                        <div className="w-full h-24 bg-gray-100 rounded mb-3 flex items-center justify-center text-gray-400 text-sm relative overflow-hidden">
+                          {c.img ? <img src={c.img} alt={c.key} className="w-full h-full object-cover rounded" /> : c.key}
                           {selectedCategories.includes(c.key) && (
                             <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -898,27 +896,35 @@ export default function ScheduleSpecial() {
                   <p className="text-gray-600 mb-6">Your special collection has been scheduled successfully.</p>
                   <div className="max-w-md mx-auto space-y-4">
                     <Summary />
-                    {scheduled?.collectionId && (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      {scheduled?.collectionId && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await scApi.downloadReceipt(scheduled.collectionId);
+                              const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.setAttribute('download', `receipt-${scheduled.collectionId}.txt`);
+                              document.body.appendChild(link);
+                              link.click();
+                              link.parentNode.removeChild(link);
+                            } catch (err) {
+                              alert('Failed to download receipt');
+                            }
+                          }}
+                          className="flex-1 px-6 py-3 rounded-lg text-white bg-green-600 hover:bg-green-700 transition duration-200"
+                        >
+                          Download Receipt
+                        </button>
+                      )}
                       <button
-                        onClick={async () => {
-                          try {
-                            const res = await scApi.downloadReceipt(scheduled.collectionId);
-                            const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.setAttribute('download', `receipt-${scheduled.collectionId}.txt`);
-                            document.body.appendChild(link);
-                            link.click();
-                            link.parentNode.removeChild(link);
-                          } catch (err) {
-                            alert('Failed to download receipt');
-                          }
-                        }}
-                        className="px-6 py-3 rounded-lg text-white bg-green-600 hover:bg-green-700"
+                        onClick={() => navigate('/special/manage')}
+                        className="flex-1 px-6 py-3 rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition duration-200"
                       >
-                        Download Receipt
+                        Manage Collections
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -956,15 +962,30 @@ export default function ScheduleSpecial() {
       <div className="max-w-7xl mx-auto px-6 pb-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="rounded-lg p-5 bg-blue-50 border border-blue-100">
-            <h3 className="font-semibold text-blue-900 mb-2">How it works</h3>
+            <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              How it works
+            </h3>
             <p className="text-sm text-blue-800">Choose category, set items and weight (kg), pick a date and time, and confirm payment. You will receive email confirmations.</p>
           </div>
           <div className="rounded-lg p-5 bg-orange-50 border border-orange-100">
-            <h3 className="font-semibold text-orange-900 mb-2">Pickup schedules</h3>
+            <h3 className="font-semibold text-orange-900 mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Pickup schedules
+            </h3>
             <p className="text-sm text-orange-800">Weekdays: Morning 9.30–12.00, Afternoon 3.00–6.00. Weekends: Morning 10.00–11.30, Afternoon 4.00–6.00.</p>
           </div>
           <div className="rounded-lg p-5 bg-green-50 border border-green-100">
-            <h3 className="font-semibold text-green-900 mb-2">Eco Benefits</h3>
+            <h3 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              Eco Benefits
+            </h3>
             <p className="text-sm text-green-800">Proper disposal reduces pollution and supports recycling. Thank you for helping keep our city clean.</p>
           </div>
         </div>
