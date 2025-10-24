@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
 import scApi from '../../api/specialCollection';
-import { QrReader } from 'react-qr-reader';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 const RecyclableSpecialWasteMap = () => {
   const navigate = useNavigate();
@@ -408,30 +408,6 @@ const RecyclableSpecialWasteMap = () => {
     setUpdatingPayment(false);
   };
 
-  // Handle QR code detection from camera
-  const handleQRCodeDetected = (result, error) => {
-    console.log('QR detection result:', result);
-    console.log('QR detection error:', error);
-    
-    if (result && result.getText) {
-      const data = result.getText();
-      if (data && data.trim()) {
-        console.log('QR Code detected:', data);
-        setQrCodeInput(data);
-        setUseCamera(false); // Stop camera scanning
-        // Automatically process the detected QR code
-        setTimeout(() => {
-          handleQRScan();
-        }, 500);
-      }
-    }
-  };
-
-  // Handle camera errors
-  const handleCameraError = (error) => {
-    console.error('Camera error:', error);
-    setCameraError('Camera access denied or not available. Please use manual input instead.');
-  };
 
   // Start camera scanning
   const startCameraScan = () => {
@@ -1109,15 +1085,29 @@ const RecyclableSpecialWasteMap = () => {
                   </div>
                   
                   <div className="relative bg-gray-100 rounded-xl overflow-hidden">
-                    <QrReader
-                      delay={300}
-                      onError={handleCameraError}
-                      onResult={handleQRCodeDetected}
-                      style={{ width: '100%', height: '300px' }}
+                    <Scanner
+                      onScan={(result) => {
+                        if (result) {
+                          console.log('QR Code detected:', result);
+                          setQrCodeInput(result);
+                          setUseCamera(false); // Stop camera scanning
+                          // Automatically process the detected QR code
+                          setTimeout(() => {
+                            handleQRScan();
+                          }, 500);
+                        }
+                      }}
+                      onError={(error) => {
+                        console.error('Camera error:', error);
+                        setCameraError('Camera access denied or not available. Please use manual input instead.');
+                      }}
                       constraints={{
                         video: {
                           facingMode: 'environment'
                         }
+                      }}
+                      styles={{
+                        container: { width: '100%', height: '300px' }
                       }}
                     />
                     <div className="absolute inset-0 border-2 border-purple-500 rounded-xl pointer-events-none">

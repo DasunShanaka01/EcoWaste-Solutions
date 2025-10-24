@@ -21,7 +21,7 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
     googleMapsApiKey: "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk"
   });
 
-  const liveLocationIcon = isLoaded ? {
+  const liveLocationIcon = isLoaded && window.google ? {
     path: window.google.maps.SymbolPath.CIRCLE,
     scale: 10,
     fillColor: "#4285F4",
@@ -52,7 +52,7 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
   }, []);
 
   useEffect(() => {
-    if (!isLoaded || !mapRef.current) return;
+    if (!isLoaded || !mapRef.current || !window.google) return;
     try {
       const bounds = new window.google.maps.LatLngBounds();
       let added = false;
@@ -189,7 +189,7 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
               strokeColor: '#FF6B35',
               strokeOpacity: 0.9,
               strokeWeight: 5,
-              icons: [{
+              icons: isLoaded && window.google ? [{
                 icon: {
                   path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
                   scale: 3,
@@ -197,7 +197,7 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
                 },
                 offset: '100%',
                 repeat: '100px'
-              }]
+              }] : []
             }}
           />
         )}
@@ -223,16 +223,16 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
                     fontWeight: "bold",
                     fontSize: "14px"
                   }}
-                  icon={{
+                  icon={isLoaded && window.google ? {
                     path: window.google.maps.SymbolPath.CIRCLE,
                     scale: 22,
                     fillColor: "#FF6B35",
                     fillOpacity: 1,
                     strokeWeight: 4,
                     strokeColor: "white",
-                  }}
+                  } : {}}
                   onClick={() => setActive({ ...marker, isHighestCapacity: true })}
-                  animation={window.google.maps.Animation.BOUNCE}
+                  animation={isLoaded && window.google ? window.google.maps.Animation.BOUNCE : undefined}
                 />
               );
             }
@@ -276,14 +276,14 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
         {selectedLocation && selectedLocation.latitude && selectedLocation.longitude && (
           <Marker 
             position={{ lat: selectedLocation.latitude, lng: selectedLocation.longitude }}
-            icon={{
+            icon={isLoaded && window.google ? {
               path: window.google.maps.SymbolPath.CIRCLE,
               scale: 12,
               fillColor: "#FF6B6B",
               fillOpacity: 1,
               strokeWeight: 3,
               strokeColor: "white",
-            }}
+            } : {}}
             title="Selected Location"
             onClick={() => setActive({ 
               lat: selectedLocation.latitude, 
@@ -299,9 +299,9 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
           <InfoWindow 
             position={{ lat: active.lat, lng: active.lng }} 
             onCloseClick={() => setActive(null)}
-            options={{
+            options={isLoaded && window.google ? {
               pixelOffset: new window.google.maps.Size(0, -10)
-            }}
+            } : {}}
           >
             <div className="p-2" style={{ maxWidth: 260 }}>
               <div className="flex items-start justify-between mb-3">
