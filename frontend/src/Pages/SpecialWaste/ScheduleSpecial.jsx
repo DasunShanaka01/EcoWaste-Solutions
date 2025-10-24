@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import scApi from '../../api/specialCollection';
 
@@ -17,11 +17,11 @@ export default function ScheduleSpecial() {
   const locationHook = useLocation();
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1..8
-  const [category, setCategory] = useState('');
+  // const [category, setCategory] = useState('');
   const [selectedCategories, setSelectedCategories] = useState([]);
-  const [item, setItem] = useState('');
-  const [otherDesc, setOtherDesc] = useState('');
-  const [quantity, setQuantity] = useState(0);
+  // const [item, setItem] = useState('');
+  // const [otherDesc, setOtherDesc] = useState('');
+  // const [quantity, setQuantity] = useState(0);
   const [categoryItems, setCategoryItems] = useState({}); // Store items for each category
   const [categoryQuantities, setCategoryQuantities] = useState({}); // Store quantities for each category
   const [fee, setFee] = useState(0);
@@ -36,7 +36,7 @@ export default function ScheduleSpecial() {
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [customLocation, setCustomLocation] = useState(null);
   const [customLocationSet, setCustomLocationSet] = useState(false);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  // const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [instructions, setInstructions] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [scheduled, setScheduled] = useState(null);
@@ -61,10 +61,10 @@ export default function ScheduleSpecial() {
     { id: 7, name: 'Confirmation' }
   ];
 
-  const itemList = useMemo(() => {
-    const c = categories.find(c => c.key === category);
-    return c ? c.items : [];
-  }, [category]);
+  // const itemList = useMemo(() => {
+  //   const c = categories.find(c => c.key === category);
+  //   return c ? c.items : [];
+  // }, [category]);
 
   useEffect(() => {
     scApi.getDates().then(setDates).catch(() => setDates([]));
@@ -77,16 +77,16 @@ export default function ScheduleSpecial() {
     if (locationHook?.state?.payFor) {
       const payItem = locationHook.state.payFor;
       setScheduled({ collectionId: payItem.id, fee: payItem.fee });
-      setCategory(payItem.category);
-      setItem(payItem.items || '');
-      setQuantity(payItem.quantity || 0);
+      // setCategory(payItem.category);
+      // setItem(payItem.items || '');
+      // setQuantity(payItem.quantity || 0);
       setSelectedDate(payItem.date);
       setTimeSlot(payItem.timeSlot);
       setPickupLocation(payItem.location || '');
       setInstructions(payItem.instructions || '');
       setStep(6);
     }
-  }, []);
+  }, [locationHook?.state?.payFor]);
 
   useEffect(() => {
     if (selectedCategories.length === 0) {
@@ -184,7 +184,7 @@ export default function ScheduleSpecial() {
         
         setCustomLocation(location);
         setCustomLocationSet(true);
-        setShowLocationPicker(false);
+        // setShowLocationPicker(false);
       } else {
         alert('Location not found. Please try a different search term.');
       }
@@ -194,9 +194,9 @@ export default function ScheduleSpecial() {
     }
   };
 
-  const toggleLocationPicker = () => {
-    setShowLocationPicker(!showLocationPicker);
-  };
+  // const toggleLocationPicker = () => {
+  //   setShowLocationPicker(!showLocationPicker);
+  // };
 
   const useCustomLocation = () => {
     if (customLocation) {
@@ -207,23 +207,23 @@ export default function ScheduleSpecial() {
       });
       setLocationAvailable(true);
       setLocationError(false);
-      setShowLocationPicker(false);
+      // setShowLocationPicker(false);
     }
   };
 
-  const handleCategorySelect = (category) => {
-    setCategory(category);
-  };
+  // const handleCategorySelect = (category) => {
+  //   setCategory(category);
+  // };
 
-  const toggleCategory = (categoryKey) => {
-    setSelectedCategories(prev => {
-      if (prev.includes(categoryKey)) {
-        return prev.filter(cat => cat !== categoryKey);
-      } else {
-        return [...prev, categoryKey];
-      }
-    });
-  };
+  // const toggleCategory = (categoryKey) => {
+  //   setSelectedCategories(prev => {
+  //     if (prev.includes(categoryKey)) {
+  //       return prev.filter(cat => cat !== categoryKey);
+  //     } else {
+  //       return [...prev, categoryKey];
+  //     }
+  //   });
+  // };
 
   const handleMultiCategorySelect = (categoryKey) => {
     if (selectedCategories.includes(categoryKey)) {

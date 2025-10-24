@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
-import scApi from '../../api/specialCollection';
+// import scApi from '../../api/specialCollection';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
 const RecyclableSpecialWasteMap = () => {
@@ -52,7 +52,7 @@ const RecyclableSpecialWasteMap = () => {
   };
 
   // Fetch waste locations function
-  const fetchWasteLocations = async () => {
+  const fetchWasteLocations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -316,12 +316,12 @@ const RecyclableSpecialWasteMap = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Load recyclable and special waste collection locations from backend
   useEffect(() => {
     fetchWasteLocations();
-  }, []);
+  }, [fetchWasteLocations]);
 
   // Combine filtered markers for the map
   const allMarkers = [...filteredRecyclableMarkers, ...filteredSpecialMarkers];

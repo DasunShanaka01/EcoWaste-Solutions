@@ -29,9 +29,7 @@ export default function AdminDashboard() {
         setWasteData(data);
         
         // Calculate stats from real data
-        const completed = data.filter(waste => waste.status === 'Completed' || waste.status === 'Processed').length;
         const pending = data.filter(waste => waste.status === 'Pending').length;
-        const failed = data.filter(waste => waste.status === 'Failed').length;
         
         setStats({
           totalUsers: 156, // This would need a separate API call

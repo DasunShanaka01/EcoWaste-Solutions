@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import Map from '../../components/Map';
 
 const WasteCollection = () => {
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [routeStarted, setRouteStarted] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -24,7 +24,7 @@ const WasteCollection = () => {
 
   // markers fetched from backend waste submissions
   const [markers, setMarkers] = useState([]);
-  const [wastes, setWastes] = useState([]);
+  // const [wastes, setWastes] = useState([]);
   const videoRef = useRef(null);
   const scanLoopRef = useRef(null);
 
@@ -68,7 +68,7 @@ const WasteCollection = () => {
 
         const wasteAccountsList = Array.isArray(data) ? data.filter(account => account.accountId != null) : [];
         console.log('Processed waste accounts list:', wasteAccountsList);
-        setWastes(wasteAccountsList); // Keep using wastes state for compatibility
+        // setWastes(wasteAccountsList); // Keep using wastes state for compatibility
 
         const accountMarkers = wasteAccountsList.map((account, idx) => {
           const loc = account.location || null;
@@ -153,24 +153,24 @@ const WasteCollection = () => {
     }
   };
 
-  const captureLocation = () => {
-    if (navigator && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setFormData(prev => ({
-            ...prev,
-            location: {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude
-            }
-          }));
-        },
-        (error) => {
-          console.warn('Geolocation error:', error);
-        }
-      );
-    }
-  };
+  // const captureLocation = () => {
+  //   if (navigator && navigator.geolocation) {
+  //     navigator.geolocation.getCurrentPosition(
+  //       (position) => {
+  //         setFormData(prev => ({
+  //           ...prev,
+  //           location: {
+  //             latitude: position.coords.latitude,
+  //             longitude: position.coords.longitude
+  //           }
+  //         }));
+  //       },
+  //       (error) => {
+  //         console.warn('Geolocation error:', error);
+  //       }
+  //     );
+  //   }
+  // };
 
   // Process QR code data - moved outside handleScan to be accessible by other functions
   const processQR = async (qrData) => {
@@ -293,60 +293,60 @@ const WasteCollection = () => {
   };
 
   // Allow manual QR paste if BarcodeDetector not available
-  const handleManualQR = async () => {
-    const qr = window.prompt('Paste QR text from the code');
-    if (qr) {
-      // process same as scanned
-      try {
-        const res = await fetch('http://localhost:8081/api/auth/waste-accounts/scan-qr', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ qrData: qr })
-        });
-        if (!res.ok) return alert('Failed to resolve QR');
-        const json = await res.json();
-        setScanResult({ success: true, data: json });
-        setFormData(prev => ({
-          ...prev,
-          tagId: json.accountId || prev.tagId,
-          accountHolder: json.userName || prev.accountHolder,
-          address: json.address || prev.address
-        }));
-        setCurrentStep(3);
-      } catch (e) {
-        alert('Error processing QR');
-      }
-    }
-  };
+  // const handleManualQR = async () => {
+  //   const qr = window.prompt('Paste QR text from the code');
+  //   if (qr) {
+  //     // process same as scanned
+  //     try {
+  //       const res = await fetch('http://localhost:8081/api/auth/waste-accounts/scan-qr', {
+  //         method: 'POST',
+  //         headers: { 'Content-Type': 'application/json' },
+  //         credentials: 'include',
+  //         body: JSON.stringify({ qrData: qr })
+  //       });
+  //       if (!res.ok) return alert('Failed to resolve QR');
+  //       const json = await res.json();
+  //       setScanResult({ success: true, data: json });
+  //       setFormData(prev => ({
+  //         ...prev,
+  //         tagId: json.accountId || prev.tagId,
+  //         accountHolder: json.userName || prev.accountHolder,
+  //         address: json.address || prev.address
+  //       }));
+  //       setCurrentStep(3);
+  //     } catch (e) {
+  //       alert('Error processing QR');
+  //     }
+  //   }
+  // };
 
   // Allow manual lookup by waste account ID (no address required)
-  const handleManualId = async () => {
-    const id = window.prompt('Enter waste account ID (example: WA123456789ABC)');
-    if (!id) return;
-    try {
-      const res = await fetch(`http://localhost:8081/api/auth/waste-accounts/scan-qr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ qrData: id })
-      });
-      if (!res.ok) return alert('Waste account not found');
-      const json = await res.json();
-      // backend returns a map with waste account details, populate scanResult and formData
-      setScanResult({ success: true, data: json });
-      setFormData(prev => ({
-        ...prev,
-        tagId: json.accountId || id,
-        accountHolder: json.userName || prev.accountHolder,
-        address: json.address || prev.address
-      }));
-      setCurrentStep(3);
-    } catch (e) {
-      console.error('Error fetching waste account details', e);
-      alert('Failed to fetch waste account details');
-    }
-  };
+  // const handleManualId = async () => {
+  //   const id = window.prompt('Enter waste account ID (example: WA123456789ABC)');
+  //   if (!id) return;
+  //   try {
+  //     const res = await fetch(`http://localhost:8081/api/auth/waste-accounts/scan-qr`, {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       credentials: 'include',
+  //       body: JSON.stringify({ qrData: id })
+  //     });
+  //     if (!res.ok) return alert('Waste account not found');
+  //     const json = await res.json();
+  //     // backend returns a map with waste account details, populate scanResult and formData
+  //     setScanResult({ success: true, data: json });
+  //     setFormData(prev => ({
+  //       ...prev,
+  //       tagId: json.accountId || id,
+  //       accountHolder: json.userName || prev.accountHolder,
+  //       address: json.address || prev.address
+  //     }));
+  //     setCurrentStep(3);
+  //   } catch (e) {
+  //     console.error('Error fetching waste account details', e);
+  //     alert('Failed to fetch waste account details');
+  //   }
+  // };
 
   const handleManualEntry = () => {
     setShowError(false);
@@ -363,17 +363,17 @@ const WasteCollection = () => {
     setCurrentStep(4); // Move to step 4 (Record Weight)
   };
 
-  const handleManualWeight = () => {
-    setFormData(prev => ({ ...prev, manualWeight: true }));
-  };
+  // const handleManualWeight = () => {
+  //   setFormData(prev => ({ ...prev, manualWeight: true }));
+  // };
 
-  const recordWeight = () => {
-    if (!formData.weight) {
-      alert('Please enter weight data');
-      return;
-    }
-    setCurrentStep(5);
-  };
+  // const recordWeight = () => {
+  //   if (!formData.weight) {
+  //     alert('Please enter weight data');
+  //     return;
+  //   }
+  //   setCurrentStep(5);
+  // };
 
   // Auto-randomize capacity for waste accounts on page load
   const autoRandomizeCapacity = async (percentage = 0.5) => {

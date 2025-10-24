@@ -64,7 +64,7 @@ export default function ManageSpecial() {
     if (!window.confirm(`Are you sure you want to cancel and permanently delete collection #${collection.id}?\n\nThis action cannot be undone and the collection will be removed from the database.`)) return;
     
     try {
-      const response = await scApi.cancel(collection.id);
+      // const response = await scApi.cancel(collection.id);
       alert('Collection cancelled and deleted successfully');
       const refreshed = await scApi.listMine();
       setItems(refreshed);

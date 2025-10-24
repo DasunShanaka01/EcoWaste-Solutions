@@ -1,5 +1,6 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
+import FallbackMap from './FallbackMap';
 
 const containerStyle = {
   width: '100%',
@@ -18,7 +19,8 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
   console.log('Map markers data:', markers);
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk"
+    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyBuKrghtMt7e6xdr3TLiGhVZNuqTFTgMXk",
+    libraries: ['places']
   });
 
   const liveLocationIcon = isLoaded && window.google ? {
@@ -32,7 +34,7 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
 
   const mapRef = useRef(null);
   const [active, setActive] = useState(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  // const [mapLoaded, setMapLoaded] = useState(false);
 
   const handleMapClick = useCallback((event) => {
     if (onLocationSelect && event.latLng) {
@@ -42,13 +44,15 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
     }
   }, [onLocationSelect]);
 
-  const mapCenter = selectedLocation && selectedLocation.latitude && selectedLocation.longitude 
-    ? { lat: selectedLocation.latitude, lng: selectedLocation.longitude }
-    : liveLocation || (markers.length > 0 ? { lat: markers[0].lat, lng: markers[0].lng } : defaultCenter);
+  const mapCenter = useMemo(() => {
+    return selectedLocation && selectedLocation.latitude && selectedLocation.longitude 
+      ? { lat: selectedLocation.latitude, lng: selectedLocation.longitude }
+      : liveLocation || (markers.length > 0 ? { lat: markers[0].lat, lng: markers[0].lng } : defaultCenter);
+  }, [selectedLocation, liveLocation, markers]);
 
   const onLoad = useCallback((map) => {
     mapRef.current = map;
-    setMapLoaded(true);
+    // setMapLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -96,16 +100,29 @@ const Map = ({ markers = [], path = [], liveLocation = null, onLocationSelect = 
   }, [isLoaded, markers, liveLocation, selectedLocation, mapCenter]);
 
   if (loadError) {
+    console.warn('Google Maps failed to load, using fallback map:', loadError);
     return (
-      <div className="w-full h-[500px] bg-gradient-to-br from-red-50 to-red-100 rounded-2xl flex items-center justify-center border-2 border-red-200">
+      <FallbackMap 
+        markers={markers}
+        liveLocation={liveLocation}
+        onLocationSelect={onLocationSelect}
+        selectedLocation={selectedLocation}
+      />
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="w-full h-[500px] bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl flex items-center justify-center border-2 border-blue-200">
         <div className="text-center p-6">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
-          <h3 className="text-lg font-bold text-red-900 mb-2">Map Loading Error</h3>
-          <p className="text-sm text-red-700">Unable to load Google Maps. Please check your connection.</p>
+          <h3 className="text-lg font-bold text-blue-900 mb-2">Loading Map...</h3>
+          <p className="text-sm text-blue-700">Please wait while we load Google Maps.</p>
         </div>
       </div>
     );
