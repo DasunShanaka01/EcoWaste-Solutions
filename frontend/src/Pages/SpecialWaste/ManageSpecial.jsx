@@ -12,11 +12,28 @@ export default function ManageSpecial() {
   const [timeSlot, setTimeSlot] = useState('');
   const [qrCodes, setQrCodes] = useState({});
   const [showQRModal, setShowQRModal] = useState(null);
+  const [activeTab, setActiveTab] = useState('ongoing');
 
   const loadData = async () => {
     scApi.listMine().then(setItems).catch(() => setItems([]));
     scApi.getDates().then(setDates).catch(() => setDates([]));
   };
+
+  // Filter collections based on status
+  const ongoingCollections = items.filter(item => 
+    item.status?.toLowerCase() !== 'collected' && 
+    item.status?.toLowerCase() !== 'completed' &&
+    item.status?.toLowerCase() !== 'cancelled'
+  );
+
+  const collectedCollections = items.filter(item => 
+    item.status?.toLowerCase() === 'collected' || 
+    item.status?.toLowerCase() === 'completed'
+  );
+
+  const cancelledCollections = items.filter(item => 
+    item.status?.toLowerCase() === 'cancelled'
+  );
 
   useEffect(() => {
     loadData();
@@ -143,23 +160,186 @@ export default function ManageSpecial() {
     }
   };
 
+  // Helper function to render collection cards
+  const renderCollectionCard = (it) => {
+    const scheduledDate = new Date(it.date);
+    const now = new Date();
+    const timeDiff = scheduledDate.getTime() - now.getTime();
+    const hoursDiff = timeDiff / (1000 * 3600);
+    const canReschedule = hoursDiff > 24;
+    const canCancel = hoursDiff > 8;
+    
+    const getStatusColor = (status) => {
+      switch (status?.toLowerCase()) {
+        case 'scheduled': return 'bg-blue-100 text-blue-800 border-blue-200';
+        case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
+        case 'collected': return 'bg-green-100 text-green-800 border-green-200';
+        case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+        default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      }
+    };
+
+    const getPaymentColor = (paymentStatus) => {
+      switch (paymentStatus?.toLowerCase()) {
+        case 'paid': return 'bg-green-100 text-green-800 border-green-200';
+        case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        case 'unpaid': return 'bg-red-100 text-red-800 border-red-200';
+        case 'cancelled': return 'bg-gray-100 text-gray-800 border-gray-200';
+        default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      }
+    };
+
+    return (
+      <div key={it.id} className="bg-white shadow-lg rounded-lg overflow-hidden">
+        {/* Header */}
+        <div className={`p-4 ${
+          it.status?.toLowerCase() === 'collected' 
+            ? 'bg-green-600' 
+            : 'bg-blue-600'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-mono text-sm">#{it.id}</span>
+            </div>
+            <div className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(it.status)}`}>
+              {it.status}
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-5">
+          {/* Category & Items */}
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">{it.category}</h3>
+            <p className="text-gray-600 text-sm mb-2">{it.items}</p>
+            <div className="flex items-center gap-4 text-sm text-gray-500">
+              <span>{it.quantity} kg</span>
+              <span>{it.timeSlot}</span>
+            </div>
+          </div>
+
+          {/* Date & Location */}
+          <div className="mb-4 space-y-1">
+            <div className="text-sm text-gray-600">
+              <span className="font-medium">Date: </span>{it.date}
+            </div>
+            <div className="text-sm text-gray-600">
+              <span className="font-medium">Location: </span>{it.location}
+            </div>
+            {/* Show completion timestamp for collected collections */}
+            {it.status?.toLowerCase() === 'collected' && it.collectedAt && (
+              <div className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded">
+                <span className="font-medium">Completed: {new Date(it.collectedAt).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Status */}
+          <div className="mb-4">
+            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${getPaymentColor(it.paymentStatus)}`}>
+              {it.paymentStatus}
+            </div>
+            {it.fee && (
+              <div className="mt-1 text-sm font-semibold text-gray-900">
+                LKR {Number(it.fee).toFixed(2)}
+              </div>
+            )}
+          </div>
+
+          {/* QR Code Section - Only show for scheduled collections */}
+          {it.status?.toLowerCase() === 'scheduled' && (
+            <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-yellow-800">Collection QR Code</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => showQRCode(it.id)}
+                    className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition duration-200 text-xs"
+                  >
+                    View
+                  </button>
+                  <button
+                    onClick={() => downloadQRCode(it.id)}
+                    className="px-3 py-1 bg-orange-500 text-white rounded hover:bg-orange-600 transition duration-200 text-xs"
+                  >
+                    Download
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            {/* Show only "Collected" button if status is collected */}
+            {it.status?.toLowerCase() === 'collected' ? (
+              <button
+                disabled
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded cursor-not-allowed opacity-75 text-sm font-medium"
+              >
+                ✓ Collected
+              </button>
+            ) : (
+              <>
+                {String(it.paymentStatus).toLowerCase() === 'unpaid' && (
+                  <button
+                    onClick={() => navigate('/special/schedule', { state: { payFor: it } })}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-200 text-sm"
+                  >
+                    Pay Now
+                  </button>
+                )}
+                
+                {canReschedule && (
+                  <button 
+                    onClick={() => setSelected(it)} 
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition duration-200 text-sm"
+                  >
+                    Reschedule
+                  </button>
+                )}
+                
+                {canCancel && it.status?.toLowerCase() !== 'cancelled' && (
+                  <button
+                    onClick={() => cancelCollection(it)}
+                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition duration-200 text-sm"
+                    title="Cancel and permanently delete this collection"
+                  >
+                    Cancel & Delete
+                  </button>
+                )}
+                
+                {!canReschedule && !canCancel && (
+                  <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 rounded text-sm text-center">
+                    {hoursDiff <= 8 ? 'Too late to modify' : 'Cannot modify'}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 p-6">
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header Section */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 border border-gray-100">
+        <div className="bg-white shadow-xl rounded-2xl p-6 mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-2">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 Manage Special Collections
               </h1>
-              <p className="text-gray-600 text-lg">Track and manage your scheduled waste collections</p>
+              <p className="text-gray-600">Track and manage your scheduled waste collections</p>
             </div>
             <button 
               onClick={loadData} 
-              className="px-6 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl hover:from-green-600 hover:to-blue-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200 flex items-center gap-2"
             >
-              <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Refresh
@@ -167,220 +347,128 @@ export default function ManageSpecial() {
           </div>
         </div>
 
-        {/* Collections Grid */}
-        <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {items.map(it => {
-            const scheduledDate = new Date(it.date);
-            const now = new Date();
-            const timeDiff = scheduledDate.getTime() - now.getTime();
-            const hoursDiff = timeDiff / (1000 * 3600);
-            const canReschedule = hoursDiff > 24;
-            const canCancel = hoursDiff > 8;
-            
-            const getStatusColor = (status) => {
-              switch (status?.toLowerCase()) {
-                case 'scheduled': return 'bg-blue-100 text-blue-800 border-blue-200';
-                case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
-                case 'collected': return 'bg-green-100 text-green-800 border-green-200';
-                case 'completed': return 'bg-green-100 text-green-800 border-green-200';
-                default: return 'bg-gray-100 text-gray-800 border-gray-200';
-              }
-            };
-
-            const getPaymentColor = (paymentStatus) => {
-              switch (paymentStatus?.toLowerCase()) {
-                case 'paid': return 'bg-green-100 text-green-800 border-green-200';
-                case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-                case 'unpaid': return 'bg-red-100 text-red-800 border-red-200';
-                case 'cancelled': return 'bg-gray-100 text-gray-800 border-gray-200';
-                default: return 'bg-gray-100 text-gray-800 border-gray-200';
-              }
-            };
-
-            return (
-              <div key={it.id} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 overflow-hidden">
-                {/* Header */}
-                <div className={`p-4 text-white ${
-                  it.status?.toLowerCase() === 'collected' 
-                    ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
-                    : 'bg-gradient-to-r from-green-500 to-blue-500'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-white rounded-full"></div>
-                      <span className="font-mono text-sm opacity-90">#{it.id}</span>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(it.status)}`}>
-                      {it.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-6">
-                  {/* Category & Items */}
-                  <div className="mb-4">
-                    <h3 className="text-xl font-bold text-gray-800 mb-1">{it.category}</h3>
-                    <p className="text-gray-600 text-sm">{it.items}</p>
-                    <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                        {it.quantity} kg
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {it.timeSlot}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Date & Location */}
-                  <div className="mb-4 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span className="font-medium">{it.date}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span>{it.location}</span>
-                    </div>
-                    {/* Show completion timestamp for collected collections */}
-                    {it.status?.toLowerCase() === 'collected' && it.collectedAt && (
-                      <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
-                        <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="font-medium">Completed: {new Date(it.collectedAt).toLocaleString()}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Payment Status */}
-                  <div className="mb-6">
-                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${getPaymentColor(it.paymentStatus)}`}>
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                      </svg>
-                      {it.paymentStatus}
-                    </div>
-                    {it.fee && (
-                      <div className="mt-2 text-lg font-bold text-gray-800">
-                        LKR {Number(it.fee).toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* QR Code Section - Only show for scheduled collections */}
-                  {it.status?.toLowerCase() === 'scheduled' && (
-                    <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0 0h-4m4 0V9a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h4m0 0h4a2 2 0 002-2V9a2 2 0 00-2-2h-4m0 0V5a2 2 0 012-2h4a2 2 0 012 2v4" />
-                          </svg>
-                          <span className="text-sm font-medium text-yellow-800">Collection QR Code</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => showQRCode(it.id)}
-                            className="px-3 py-1 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-all duration-300 text-xs font-medium"
-                          >
-                            👁️ View
-                          </button>
-                          <button
-                            onClick={() => downloadQRCode(it.id)}
-                            className="px-3 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all duration-300 text-xs font-medium"
-                          >
-                            📥 Download
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-2">
-                    {/* Show only "Collected" button if status is collected */}
-                    {it.status?.toLowerCase() === 'collected' ? (
-                      <button
-                        disabled
-                        className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg cursor-not-allowed opacity-75 text-sm font-medium flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        ✅ Collected
-                      </button>
-                    ) : (
-                      <>
-                        {String(it.paymentStatus).toLowerCase() === 'unpaid' && (
-                          <button
-                            onClick={() => navigate('/special/schedule', { state: { payFor: it } })}
-                            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-300 text-sm font-medium"
-                          >
-                            💳 Pay Now
-                          </button>
-                        )}
-                        
-                        {canReschedule && (
-                          <button 
-                            onClick={() => setSelected(it)} 
-                            className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:from-green-600 hover:to-teal-600 transition-all duration-300 text-sm font-medium"
-                          >
-                            📅 Reschedule
-                          </button>
-                        )}
-                        
-                        {canCancel && it.status?.toLowerCase() !== 'cancelled' && (
-                          <button
-                            onClick={() => cancelCollection(it)}
-                            className="flex-1 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-300 text-sm font-medium"
-                            title="Cancel and permanently delete this collection"
-                          >
-                            🗑️ Cancel & Delete
-                          </button>
-                        )}
-                        
-                        {!canReschedule && !canCancel && (
-                          <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-sm text-center">
-                            {hoursDiff <= 8 ? 'Too late to modify' : 'Cannot modify'}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
+        {/* Tab Navigation */}
+        <div className="bg-white shadow-xl rounded-2xl p-6 mb-8">
+          <div className="flex space-x-1">
+            <button
+              onClick={() => setActiveTab('ongoing')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition duration-200 ${
+                activeTab === 'ongoing'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Ongoing ({ongoingCollections.length})
               </div>
-            );
-          })}
+            </button>
+            <button
+              onClick={() => setActiveTab('collected')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition duration-200 ${
+                activeTab === 'collected'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Collected ({collectedCollections.length})
+              </div>
+            </button>
+            {cancelledCollections.length > 0 && (
+              <button
+                onClick={() => setActiveTab('cancelled')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition duration-200 ${
+                  activeTab === 'cancelled'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Cancelled ({cancelledCollections.length})
+                </div>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Empty State */}
+        {/* Collections Grid */}
+        <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {activeTab === 'ongoing' && ongoingCollections.map(renderCollectionCard)}
+          {activeTab === 'collected' && collectedCollections.map(renderCollectionCard)}
+          {activeTab === 'cancelled' && cancelledCollections.map(renderCollectionCard)}
+        </div>
+
+        {/* Empty States */}
         {items.length === 0 && (
-          <div className="text-center py-16">
-            <div className="w-24 h-24 bg-gradient-to-r from-green-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">No Collections Yet</h3>
-            <p className="text-gray-600 mb-6">You haven't scheduled any special waste collections yet.</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Collections Yet</h3>
+            <p className="text-gray-600 mb-4">You haven't scheduled any special waste collections yet.</p>
             <button
               onClick={() => navigate('/special/schedule')}
-              className="px-6 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl hover:from-green-600 hover:to-blue-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-200"
             >
               Schedule Your First Collection
             </button>
-        </div>
+          </div>
+        )}
+
+        {/* Empty State for Ongoing Collections */}
+        {activeTab === 'ongoing' && ongoingCollections.length === 0 && items.length > 0 && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Ongoing Collections</h3>
+            <p className="text-gray-600 mb-4">All your collections have been completed or cancelled.</p>
+            <button
+              onClick={() => navigate('/special/schedule')}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-200"
+            >
+              Schedule New Collection
+            </button>
+          </div>
+        )}
+
+        {/* Empty State for Collected Collections */}
+        {activeTab === 'collected' && collectedCollections.length === 0 && items.length > 0 && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Collected Collections</h3>
+            <p className="text-gray-600">You haven't completed any collections yet.</p>
+          </div>
+        )}
+
+        {/* Empty State for Cancelled Collections */}
+        {activeTab === 'cancelled' && cancelledCollections.length === 0 && items.length > 0 && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Cancelled Collections</h3>
+            <p className="text-gray-600">You haven't cancelled any collections.</p>
+          </div>
         )}
 
         {selected && (

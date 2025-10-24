@@ -54,6 +54,18 @@ const scApi = {
   cancel: async (id) => {
     const res = await axios.post(`${API_URL}/cancel/${id}`, {}, { withCredentials: true });
     return res.data;
+  },
+  getMapCollections: async () => {
+    const res = await axios.get(`${API_URL}/map`, { withCredentials: true });
+    return res.data;
+  },
+  getDashboardStats: async () => {
+    const res = await axios.get(`${API_URL}/dashboard/stats`, { withCredentials: true });
+    return res.data;
+  },
+  searchCollection: async (collectionId) => {
+    const res = await axios.get(`${API_URL}/search/${collectionId}`, { withCredentials: true });
+    return res.data;
   }
 };
 
