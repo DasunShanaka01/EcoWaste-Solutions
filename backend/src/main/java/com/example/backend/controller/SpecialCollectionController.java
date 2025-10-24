@@ -92,6 +92,9 @@ public class SpecialCollectionController {
 
     @GetMapping("/mine")
     public ResponseEntity<List<SpecialCollection>> myCollections(HttpServletRequest request) {
+        String userId = getUserIdFromCookie(request);
+        if (userId == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(specialCollectionService.listUserCollections(userId));
         System.out.println("SpecialCollectionController.myCollections() called");
         String userId = getUserIdFromCookie(request);
         System.out.println("User ID from cookie: " + userId);

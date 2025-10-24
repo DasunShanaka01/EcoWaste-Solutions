@@ -1,8 +1,15 @@
+import React, { useEffect, useMemo, useState } from 'react';
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import scApi from '../../api/specialCollection';
 
 const categories = [
+  { key: 'Bulky', items: ['Sofa', 'Refrigerator', 'Mattress', 'Table', 'Chair'], img: '/bulky.png' },
+  { key: 'Hazardous', items: ['Batteries', 'Paint', 'Chemicals'], img: '/hazardous.png' },
+  { key: 'Organic', items: ['Leaves', 'Branches bundle', 'Kitchen waste'], img: '/organic.png' },
+  { key: 'E-Waste', items: ['TV', 'Computer', 'Printer'], img: '/ewaste.png' },
+  { key: 'Recyclable', items: ['Plastic', 'Paper', 'Glass', 'Metal'], img: '/recycle.png' },
+  { key: 'Other', items: [], img: '/other.png' },
   { key: 'Bulky', items: ['Sofa', 'Refrigerator', 'Mattress', 'Table', 'Chair'], img: 'https://media.istockphoto.com/id/2196163100/photo/trailer-with-bulky-waste-from-a-household-clearance.jpg?s=2048x2048&w=is&k=20&c=sxZXpRwI5g8rzQC3mhrqpqI69rZNq7yiXG8aWoji7uI=' },
   { key: 'Hazardous', items: ['Batteries', 'Paint', 'Chemicals'], img: 'https://images.unsplash.com/photo-1591268285986-e6ad4dbf14f7?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=687' },
   { key: 'Organic', items: ['Leaves', 'Branches bundle', 'Kitchen waste'], img: 'https://plus.unsplash.com/premium_photo-1723373960718-c26efde88d6d?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=688' },
@@ -17,6 +24,10 @@ export default function ScheduleSpecial() {
   const locationHook = useLocation();
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1..8
+  const [category, setCategory] = useState('');
+  const [item, setItem] = useState('');
+  const [otherDesc, setOtherDesc] = useState('');
+  const [quantity, setQuantity] = useState(0);
   // const [category, setCategory] = useState('');
   const [selectedCategories, setSelectedCategories] = useState([]);
   // const [item, setItem] = useState('');
@@ -61,6 +72,10 @@ export default function ScheduleSpecial() {
     { id: 7, name: 'Confirmation' }
   ];
 
+  const itemList = useMemo(() => {
+    const c = categories.find(c => c.key === category);
+    return c ? c.items : [];
+  }, [category]);
   // const itemList = useMemo(() => {
   //   const c = categories.find(c => c.key === category);
   //   return c ? c.items : [];
@@ -77,6 +92,9 @@ export default function ScheduleSpecial() {
     if (locationHook?.state?.payFor) {
       const payItem = locationHook.state.payFor;
       setScheduled({ collectionId: payItem.id, fee: payItem.fee });
+      setCategory(payItem.category);
+      setItem(payItem.items || '');
+      setQuantity(payItem.quantity || 0);
       // setCategory(payItem.category);
       // setItem(payItem.items || '');
       // setQuantity(payItem.quantity || 0);
@@ -86,6 +104,17 @@ export default function ScheduleSpecial() {
       setInstructions(payItem.instructions || '');
       setStep(6);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!category || Number(quantity) <= 0) {
+      setFee(0);
+      return;
+    }
+    scApi.calculateFee({ category, items: item || otherDesc, quantity: Number(quantity) })
+      .then(r => setFee(r.fee || 0))
+      .catch(() => setFee(0));
+  }, [category, item, otherDesc, quantity]);
   }, [locationHook?.state?.payFor]);
 
   useEffect(() => {
@@ -130,6 +159,14 @@ export default function ScheduleSpecial() {
     }
   }, [selectedDate]);
 
+  const canNext = () => {
+    if (step === 1) return !!category;
+    if (step === 2) {
+      const hasItem = category === 'Other' ? !!otherDesc : !!item;
+      return hasItem && Number(quantity) > 0;
+    }
+    if (step === 3) return !!selectedDate && !!timeSlot;
+    if (step === 4) return !!pickupLocation;
   const requestGeolocation = () => {
     if (!navigator || !navigator.geolocation) {
       setLocation(null);
@@ -281,6 +318,14 @@ export default function ScheduleSpecial() {
   const scheduleOrder = async () => {
     setSubmitting(true);
     try {
+      const payload = {
+        category,
+        items: item,
+        quantity: Number(quantity),
+        date: selectedDate,
+        timeSlot,
+        location: pickupLocation,
+        instructions
       // Create items and quantities strings for multiple categories
       const itemsList = selectedCategories.map(cat => {
         const item = categoryItems[cat];
@@ -329,6 +374,8 @@ export default function ScheduleSpecial() {
       }
       setPaid(true);
       next(); // go to confirmation
+      // navigate back to manage after short delay to show updated status
+      setTimeout(() => navigate('/special/manage'), 800);
     } catch (e) {
       alert('Payment failed');
     }
@@ -384,6 +431,16 @@ export default function ScheduleSpecial() {
       <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
       <div className="space-y-2 text-sm">
         <div className="flex justify-between py-1 border-b border-gray-100">
+          <span className="text-gray-600">Category</span>
+          <span className="font-medium">{category || '-'}</span>
+        </div>
+        <div className="flex justify-between py-1 border-b border-gray-100">
+          <span className="text-gray-600">Item</span>
+          <span className="font-medium">{item || (category === 'Other' && otherDesc ? otherDesc : '-')}</span>
+        </div>
+        <div className="flex justify-between py-1 border-b border-gray-100">
+          <span className="text-gray-600">Quantity</span>
+          <span className="font-medium">{Number(quantity) > 0 ? quantity : 0}</span>
             <span className="text-gray-600">Categories</span>
             <span className="font-medium">{selectedCategories.length > 0 ? selectedCategories.join(', ') : '-'}</span>
           </div>
@@ -483,6 +540,13 @@ export default function ScheduleSpecial() {
               {/* Step 1: Category */}
               {step === 1 && (
                 <div>
+                  <h2 className="text-2xl font-bold mb-2">Select Waste Category</h2>
+                  <p className="text-gray-600 mb-6">Choose the type of special waste you want to schedule</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {categories.map(c => (
+                      <button key={c.key} onClick={() => setCategory(c.key)} className={`border rounded-lg p-4 text-left hover:shadow transition ${category === c.key ? 'border-green-600' : 'border-gray-300'}`}>
+                        <div className="w-full h-24 bg-gray-100 rounded mb-3 flex items-center justify-center text-gray-400 text-sm">
+                          {c.img ? <img src={c.img} alt={c.key} className="max-h-20" /> : c.key}
                   <h2 className="text-2xl font-bold mb-2">Select Waste Categories</h2>
                   <p className="text-gray-600 mb-6">Choose one or more types of special waste you want to schedule</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -528,6 +592,12 @@ export default function ScheduleSpecial() {
 
               {/* Step 2: Items/Quantity */}
               {step === 2 && (
+                <div className="max-w-lg">
+                  <h2 className="text-2xl font-bold mb-2">Items and Quantity</h2>
+                  <p className="text-gray-600 mb-6">Specify item and total weight</p>
+                  {category !== 'Other' ? (
+                    <div className="flex gap-3">
+                      <select value={item} onChange={e => setItem(e.target.value)} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
                 <div className="max-w-4xl">
                   <h2 className="text-2xl font-bold mb-2">Items and Quantity</h2>
                   <p className="text-gray-600 mb-6">Specify items and total weight for each selected category</p>
@@ -577,6 +647,15 @@ export default function ScheduleSpecial() {
                           <option key={it} value={it}>{it}</option>
                         ))}
                       </select>
+                      <input type="number" min={1} value={quantity} onChange={e => setQuantity(e.target.value)} className="w-40 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Quantity (kg)" />
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <input value={otherDesc} onChange={e => setOtherDesc(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Describe the item" />
+                      <input type="number" min={1} value={quantity} onChange={e => setQuantity(e.target.value)} className="w-40 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Quantity (kg)" />
+                    </div>
+                  )}
+                  <div className="mt-3 text-sm text-gray-700">Estimated Fee: <span className="font-semibold">LKR {fee.toFixed(2)}</span></div>
                               <input 
                                 type="number" 
                                 min={1} 
@@ -651,6 +730,9 @@ export default function ScheduleSpecial() {
 
               {/* Step 4: Pickup Location */}
               {step === 4 && (
+                <div className="max-w-lg">
+                  <h2 className="text-2xl font-bold mb-2">Pickup Location</h2>
+                  <p className="text-gray-600 mb-6">Where should we collect your special waste?</p>
                 <div className="max-w-4xl">
                   <h2 className="text-2xl font-bold mb-2">Pickup Location</h2>
                   <p className="text-gray-600 mb-6">Where should we collect your special waste?</p>
@@ -664,6 +746,7 @@ export default function ScheduleSpecial() {
                       <option key={loc} value={loc}>{loc}</option>
                     ))}
                   </select>
+                  <textarea className="w-full mt-3 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="Special instructions (optional)" value={instructions} onChange={e => setInstructions(e.target.value)} rows={4} />
                     </div>
 
                     {/* Location Selection Methods */}
@@ -807,6 +890,8 @@ export default function ScheduleSpecial() {
               {step === 5 && (
                 <div className="max-w-xl">
                   <h2 className="text-2xl font-bold mb-2">Order Summary</h2>
+                  <p className="text-gray-600 mb-6">Review details before scheduling</p>
+                  <Summary />
                   <p className="text-gray-600 mb-6">Review details and select payment method before scheduling</p>
                   <Summary />
                   
@@ -873,6 +958,30 @@ export default function ScheduleSpecial() {
                 <div className="max-w-lg">
                   <h2 className="text-2xl font-bold mb-2">Payment</h2>
                   <p className="text-gray-600 mb-6">Complete payment to confirm your booking</p>
+                  {!scheduled?.collectionId && (
+                    <button onClick={scheduleOrder} disabled={submitting} className={`px-6 py-3 rounded-lg text-white ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} `}>
+                      {submitting ? (
+                        <span className="inline-flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                          </svg>
+                          Scheduling...
+                        </span>
+                      ) : 'Schedule & Proceed to Pay'}
+                    </button>
+                  )}
+                  {scheduled?.collectionId && !paid && (
+                    <div className="space-y-4">
+                      <div className="text-sm text-gray-700">Collection ID: <span className="font-mono">{scheduled.collectionId}</span></div>
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2">Choose a payment method</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button onClick={() => setPaymentMethod('card')} className={`px-3 py-2 rounded border ${paymentMethod === 'card' ? 'border-green-600 text-green-700' : 'border-gray-300 text-gray-700'}`}>Card</button>
+                          <button onClick={() => setPaymentMethod('bank')} className={`px-3 py-2 rounded border ${paymentMethod === 'bank' ? 'border-green-600 text-green-700' : 'border-gray-300 text-gray-700'}`}>Bank Transfer</button>
+                          <button onClick={() => setPaymentMethod('cash')} className={`px-3 py-2 rounded border ${paymentMethod === 'cash' ? 'border-green-600 text-green-700' : 'border-gray-300 text-gray-700'}`}>Cash</button>
+                        </div>
+                      </div>
                   {scheduled?.collectionId && !paid && (
                     <div className="space-y-4">
                       <div className="text-sm text-gray-700">Collection ID: <span className="font-mono">{scheduled.collectionId}</span></div>
@@ -896,6 +1005,27 @@ export default function ScheduleSpecial() {
                   <p className="text-gray-600 mb-6">Your special collection has been scheduled successfully.</p>
                   <div className="max-w-md mx-auto space-y-4">
                     <Summary />
+                    {scheduled?.collectionId && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await scApi.downloadReceipt(scheduled.collectionId);
+                            const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', `receipt-${scheduled.collectionId}.txt`);
+                            document.body.appendChild(link);
+                            link.click();
+                            link.parentNode.removeChild(link);
+                          } catch (err) {
+                            alert('Failed to download receipt');
+                          }
+                        }}
+                        className="px-6 py-3 rounded-lg text-white bg-green-600 hover:bg-green-700"
+                      >
+                        Download Receipt
+                      </button>
+                    )}
                     <div className="flex flex-col sm:flex-row gap-3">
                       {scheduled?.collectionId && (
                         <button
@@ -962,6 +1092,15 @@ export default function ScheduleSpecial() {
       <div className="max-w-7xl mx-auto px-6 pb-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="rounded-lg p-5 bg-blue-50 border border-blue-100">
+            <h3 className="font-semibold text-blue-900 mb-2">How it works</h3>
+            <p className="text-sm text-blue-800">Choose category, set items and weight (kg), pick a date and time, and confirm payment. You will receive email confirmations.</p>
+          </div>
+          <div className="rounded-lg p-5 bg-orange-50 border border-orange-100">
+            <h3 className="font-semibold text-orange-900 mb-2">Pickup schedules</h3>
+            <p className="text-sm text-orange-800">Weekdays: Morning 9.30–12.00, Afternoon 3.00–6.00. Weekends: Morning 10.00–11.30, Afternoon 4.00–6.00.</p>
+          </div>
+          <div className="rounded-lg p-5 bg-green-50 border border-green-100">
+            <h3 className="font-semibold text-green-900 mb-2">Eco Benefits</h3>
             <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
               <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

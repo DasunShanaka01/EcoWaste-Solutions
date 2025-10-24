@@ -31,6 +31,10 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
 
     public SpecialCollectionServiceImpl(SpecialCollectionRepository specialCollectionRepository,
                                         UserRepository userRepository,
+                                        EmailService emailService) {
+        this.specialCollectionRepository = specialCollectionRepository;
+        this.userRepository = userRepository;
+        this.emailService = emailService;
                                         EmailService emailService,
                                         QRCodeService qrCodeService) {
         this.specialCollectionRepository = specialCollectionRepository;
@@ -130,6 +134,7 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         sc.setFee(calculateFee(toFeeRequest(req)));
         sc.setStatus("Scheduled");
         sc.setPaymentStatus("Unpaid");
+        SpecialCollection saved = specialCollectionRepository.save(sc);
         
         // Debug: Log the payment method received
         System.out.println("DEBUG: Received paymentMethod: " + req.paymentMethod);
@@ -154,6 +159,11 @@ public class SpecialCollectionServiceImpl implements SpecialCollectionService {
         if (!sc.getUserId().equals(userId)) {
             throw new CustomException("Not authorized to modify this collection");
         }
+        // simplistic window: must be >24h before (skip actual time calc for brevity)
+        // enforce availability
+        String storageSlot2 = timeSlot;
+        if (timeSlot != null && timeSlot.toLowerCase().startsWith("morning")) storageSlot2 = "Morning";
+        if (timeSlot != null && timeSlot.toLowerCase().startsWith("afternoon")) storageSlot2 = "Afternoon";
         
         // Check if rescheduling is allowed (more than 24 hours before scheduled time)
         String storageSlot2 = timeSlot;
