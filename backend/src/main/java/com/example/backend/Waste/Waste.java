@@ -31,6 +31,10 @@ public class Waste {
     private double totalPaybackAmount;
     private String paymentMethod;
     private String paymentStatus;
+    private String paybackMethod; // Bank Transfer, Digital Wallet, Donation
+    private BankTransferDetails bankTransferDetails;
+    private Integer digitalWalletPoints;
+    private String charityOrganization;
     private List<Item> items;
     private String imageUrl;
 
@@ -91,5 +95,16 @@ public class Waste {
         private double latitude;
         private double longitude;
         private String address; // Added address field for location description
+    }
+
+    // Inner class for bank transfer details
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class BankTransferDetails {
+        private String bankName;
+        private String accountNumber;
+        private String accountHolderName;
+        private String branchCode;
     }
 }

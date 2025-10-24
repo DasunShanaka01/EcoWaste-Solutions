@@ -21,7 +21,8 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Override
-    public void sendSpecialCollectionConfirmation(String email, String collectionId, String date, String timeSlot, double fee, String location) {
+    public void sendSpecialCollectionConfirmation(String email, String collectionId, String date, String timeSlot,
+            double fee, String location) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(email);
         message.setSubject("Special Waste Collection Confirmation - " + collectionId);
@@ -36,7 +37,8 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Override
-    public void sendPaymentNotification(String email, String collectionId, double amount, String method, boolean success) {
+    public void sendPaymentNotification(String email, String collectionId, double amount, String method,
+            boolean success) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(email);
         message.setSubject((success ? "Payment Successful" : "Payment Failed") + " - " + collectionId);
@@ -59,6 +61,37 @@ public class EmailServiceImpl implements EmailService {
                 + "Time Slot: " + timeSlot + "\n"
                 + "Completed At: " + java.time.LocalDateTime.now().toString() + "\n\n"
                 + "Thank you for using EcoWaste Solutions. Your waste has been properly disposed of.");
+        mailSender.send(message);
+    }
+
+    @Override
+    public void sendRecyclableWasteCollectedNotification(String email, String wasteId, String category, double weight,
+            double paybackAmount, String paybackMethod, String collectedAt) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Recyclable Waste Collected - " + wasteId);
+
+        String paybackDetails = "";
+        if (paybackMethod.equals("Bank Transfer")) {
+            paybackDetails = "Your payback of LKR " + String.format("%.2f", paybackAmount)
+                    + " will be transferred to your bank account within 3-5 business days.";
+        } else if (paybackMethod.equals("Digital Wallet")) {
+            paybackDetails = "Your payback of " + Math.round(paybackAmount)
+                    + " points has been added to your digital wallet.";
+        } else if (paybackMethod.equals("Donation")) {
+            paybackDetails = "Your payback of LKR " + String.format("%.2f", paybackAmount)
+                    + " has been donated to charity as requested.";
+        }
+
+        message.setText("Your recyclable waste has been successfully collected!\n\n"
+                + "Waste ID: " + wasteId + "\n"
+                + "Category: " + category + "\n"
+                + "Weight: " + weight + " kg\n"
+                + "Payback Amount: LKR " + String.format("%.2f", paybackAmount) + "\n"
+                + "Payback Method: " + paybackMethod + "\n"
+                + "Collected At: " + collectedAt + "\n\n"
+                + paybackDetails + "\n\n"
+                + "Thank you for contributing to environmental sustainability with EcoWaste Solutions!");
         mailSender.send(message);
     }
 }

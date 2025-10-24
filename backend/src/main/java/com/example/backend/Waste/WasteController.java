@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.example.backend.service.EmailService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,6 +36,9 @@ public class WasteController {
 
 	@Autowired
 	private ObjectMapper objectMapper;
+
+	@Autowired
+	private EmailService emailService;
 
 	private static final String UPLOAD_DIR = "uploads/";
 
@@ -68,6 +72,10 @@ public class WasteController {
 			@RequestPart("totalPaybackAmount") String totalPaybackAmountStr,
 			@RequestPart("paymentMethod") String paymentMethod,
 			@RequestPart("paymentStatus") String paymentStatus,
+			@RequestPart("paybackMethod") String paybackMethod,
+			@RequestPart(value = "bankTransferDetails", required = false) String bankTransferDetailsJson,
+			@RequestPart(value = "digitalWalletPoints", required = false) String digitalWalletPointsStr,
+			@RequestPart(value = "charityOrganization", required = false) String charityOrganization,
 			@RequestPart("items") String itemsJson,
 			@RequestPart("location") String locationJson,
 			@RequestPart(value = "imageFile", required = false) MultipartFile imageFile) {
@@ -104,9 +112,22 @@ public class WasteController {
 				}
 			}
 
+			// Parse payback method specific details
+			Waste.BankTransferDetails bankTransferDetails = null;
+			Integer digitalWalletPoints = null;
+			if (paybackMethod.equals("Bank Transfer") && bankTransferDetailsJson != null
+					&& !bankTransferDetailsJson.isEmpty()) {
+				bankTransferDetails = objectMapper.readValue(bankTransferDetailsJson, Waste.BankTransferDetails.class);
+			}
+			if (paybackMethod.equals("Digital Wallet") && digitalWalletPointsStr != null
+					&& !digitalWalletPointsStr.isEmpty()) {
+				digitalWalletPoints = Integer.parseInt(digitalWalletPointsStr);
+			}
+
 			Waste savedWaste = wasteService.save(userId, fullName, phoneNumber, email, submissionMethod, status, pickup,
 					totalWeightKg, totalPaybackAmount, paymentMethod,
-					paymentStatus, items, imageUrl, location);
+					paymentStatus, paybackMethod, bankTransferDetails, digitalWalletPoints, charityOrganization, items,
+					imageUrl, location);
 			return new ResponseEntity<>(savedWaste, HttpStatus.CREATED);
 		} catch (Exception e) {
 			System.err.println("Error in waste submission: " + e.getMessage());
@@ -304,7 +325,8 @@ public class WasteController {
 			Optional<Waste> waste = wasteService.findById(id);
 			if (waste.isPresent()) {
 				Waste wasteData = waste.get();
-				String qrCodeBase64 = wasteService.generateQRCodeBase64(wasteData.getId().toString(), wasteData.getUserId());
+				String qrCodeBase64 = wasteService.generateQRCodeBase64(wasteData.getId().toString(),
+						wasteData.getUserId());
 				Map<String, String> response = new HashMap<>();
 				response.put("qrCode", qrCodeBase64);
 				response.put("wasteId", wasteData.getId().toString());
@@ -327,11 +349,12 @@ public class WasteController {
 			Optional<Waste> waste = wasteService.findById(id);
 			if (waste.isPresent()) {
 				Waste wasteData = waste.get();
-				byte[] qrCodeBytes = wasteService.generateQRCodeBytes(wasteData.getId().toString(), wasteData.getUserId());
+				byte[] qrCodeBytes = wasteService.generateQRCodeBytes(wasteData.getId().toString(),
+						wasteData.getUserId());
 				return ResponseEntity.ok()
-					.header("Content-Type", "image/png")
-					.header("Content-Disposition", "attachment; filename=qr-code-" + id + ".png")
-					.body(qrCodeBytes);
+						.header("Content-Type", "image/png")
+						.header("Content-Disposition", "attachment; filename=qr-code-" + id + ".png")
+						.body(qrCodeBytes);
 			} else {
 				return new ResponseEntity<>(HttpStatus.NOT_FOUND);
 			}
@@ -446,7 +469,8 @@ public class WasteController {
 				Map<String, Object> response = new HashMap<>();
 				Waste wasteData = waste.get();
 				response.put("wasteId", wasteData.getId().toString());
-				response.put("simpleId", wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
+				response.put("simpleId",
+						wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
 				response.put("userName", wasteData.getFullName());
 				response.put("phoneNumber", wasteData.getPhoneNumber());
 				response.put("email", wasteData.getEmail());
@@ -456,6 +480,10 @@ public class WasteController {
 				response.put("submissionMethod", wasteData.getSubmissionMethod());
 				response.put("status", wasteData.getStatus());
 				response.put("paybackAmount", wasteData.getTotalPaybackAmount());
+				response.put("paybackMethod", wasteData.getPaybackMethod());
+				response.put("bankTransferDetails", wasteData.getBankTransferDetails());
+				response.put("digitalWalletPoints", wasteData.getDigitalWalletPoints());
+				response.put("charityOrganization", wasteData.getCharityOrganization());
 				response.put("submissionDate",
 						wasteData.getSubmissionDate() != null ? wasteData.getSubmissionDate().toString() : null);
 				response.put("items", wasteData.getItems());
@@ -477,7 +505,8 @@ public class WasteController {
 
 	// Update waste status by simple ID
 	@PutMapping("/{id}/status")
-	public ResponseEntity<Map<String, Object>> updateWasteStatus(@PathVariable String id, @RequestBody Map<String, String> request) {
+	public ResponseEntity<Map<String, Object>> updateWasteStatus(@PathVariable String id,
+			@RequestBody Map<String, String> request) {
 		try {
 			String newStatus = request.get("status");
 			if (newStatus == null) {
@@ -491,7 +520,8 @@ public class WasteController {
 				Map<String, Object> response = new HashMap<>();
 				Waste wasteData = waste.get();
 				response.put("wasteId", wasteData.getId().toString());
-				response.put("simpleId", wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
+				response.put("simpleId",
+						wasteData.getId().toString().substring(wasteData.getId().toString().length() - 6));
 				response.put("status", wasteData.getStatus());
 				response.put("message", "Waste status updated successfully");
 				return new ResponseEntity<>(response, HttpStatus.OK);
@@ -510,7 +540,8 @@ public class WasteController {
 
 	// Update payment status by simple ID
 	@PutMapping("/{id}/payment-status")
-	public ResponseEntity<Map<String, Object>> updatePaymentStatus(@PathVariable String id, @RequestBody Map<String, String> request) {
+	public ResponseEntity<Map<String, Object>> updatePaymentStatus(@PathVariable String id,
+			@RequestBody Map<String, String> request) {
 		try {
 			String newPaymentStatus = request.get("paymentStatus");
 			if (newPaymentStatus == null) {
@@ -524,10 +555,11 @@ public class WasteController {
 				Waste waste = wasteOpt.get();
 				waste.setPaymentStatus(newPaymentStatus);
 				Waste updatedWaste = wasteService.updateWaste(waste);
-				
+
 				Map<String, Object> response = new HashMap<>();
 				response.put("wasteId", updatedWaste.getId().toString());
-				response.put("simpleId", updatedWaste.getId().toString().substring(updatedWaste.getId().toString().length() - 6));
+				response.put("simpleId",
+						updatedWaste.getId().toString().substring(updatedWaste.getId().toString().length() - 6));
 				response.put("paymentStatus", updatedWaste.getPaymentStatus());
 				response.put("message", "Payment status updated successfully");
 				return new ResponseEntity<>(response, HttpStatus.OK);
@@ -540,6 +572,41 @@ public class WasteController {
 			e.printStackTrace();
 			Map<String, Object> errorResponse = new HashMap<>();
 			errorResponse.put("error", "Error updating payment status: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Send collection email notification
+	@PostMapping("/send-collection-email")
+	public ResponseEntity<Map<String, Object>> sendCollectionEmail(@RequestBody Map<String, Object> request) {
+		try {
+			String email = (String) request.get("email");
+			String wasteId = (String) request.get("wasteId");
+			String category = (String) request.get("category");
+			Double weight = ((Number) request.get("weight")).doubleValue();
+			Double paybackAmount = ((Number) request.get("paybackAmount")).doubleValue();
+			String paybackMethod = (String) request.get("paybackMethod");
+			String collectedAt = (String) request.get("collectedAt");
+
+			if (email == null || wasteId == null || category == null || weight == null || paybackAmount == null) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Missing required fields");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			// Send email notification
+			emailService.sendRecyclableWasteCollectedNotification(
+					email, wasteId, category, weight, paybackAmount, paybackMethod, collectedAt);
+
+			Map<String, Object> response = new HashMap<>();
+			response.put("message", "Collection email sent successfully");
+			response.put("wasteId", wasteId);
+			return new ResponseEntity<>(response, HttpStatus.OK);
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Failed to send collection email: " + e.getMessage());
 			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}

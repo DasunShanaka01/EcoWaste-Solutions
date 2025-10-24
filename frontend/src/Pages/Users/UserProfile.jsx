@@ -21,6 +21,8 @@ export default function UserProfile() {
   const [selectedQRSubmission, setSelectedQRSubmission] = useState(null);
   const [wasteAccount, setWasteAccount] = useState(null);
   const [wasteAccountLoading, setWasteAccountLoading] = useState(false);
+  const [digitalWallet, setDigitalWallet] = useState(null);
+  const [digitalWalletLoading, setDigitalWalletLoading] = useState(false);
   
   // Helper function to safely render values (convert objects to strings)
   const safeRender = (value) => {
@@ -75,9 +77,10 @@ export default function UserProfile() {
         phone: contextUser.phone || "",
         email: contextUser.email || ""
       });
-      // Fetch waste submissions and waste account when user is loaded
+      // Fetch waste submissions, waste account, and digital wallet when user is loaded
       fetchWasteSubmissions(contextUser.id || contextUser._id);
       fetchWasteAccount(contextUser.id || contextUser._id);
+      fetchDigitalWallet(contextUser.id || contextUser._id);
     }
   }, [contextUser]);
 
@@ -116,6 +119,33 @@ export default function UserProfile() {
       setWasteAccount(null);
     } finally {
       setWasteAccountLoading(false);
+    }
+  };
+
+  const fetchDigitalWallet = async (userId) => {
+    if (!userId) return;
+    
+    setDigitalWalletLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8081/api/digital-wallet/${userId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        const wallet = await response.json();
+        setDigitalWallet(wallet);
+      } else {
+        console.error("Failed to fetch digital wallet");
+        setDigitalWallet(null);
+      }
+    } catch (err) {
+      console.error("Error fetching digital wallet:", err);
+      setDigitalWallet(null);
+    } finally {
+      setDigitalWalletLoading(false);
     }
   };
 

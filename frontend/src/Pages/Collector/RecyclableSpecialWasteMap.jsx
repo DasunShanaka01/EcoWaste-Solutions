@@ -501,6 +501,36 @@ const RecyclableSpecialWasteMap = () => {
       console.log('Status update response:', data);
 
       if (response.ok) {
+        // If marking as collected for recyclable waste, send email notification
+        if (isRecyclable && newStatus === 'Collected' && manualSearchResult && manualSearchResult.data) {
+          try {
+            const emailResponse = await fetch('http://localhost:8081/api/waste/send-collection-email', {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                wasteId: manualSearchResult.data.wasteId,
+                email: manualSearchResult.data.email,
+                category: manualSearchResult.data.category,
+                weight: manualSearchResult.data.weight,
+                paybackAmount: manualSearchResult.data.paybackAmount,
+                paybackMethod: manualSearchResult.data.paybackMethod || 'Bank Transfer',
+                collectedAt: new Date().toISOString()
+              }),
+            });
+            
+            if (emailResponse.ok) {
+              console.log('Collection email sent successfully');
+            } else {
+              console.error('Failed to send collection email');
+            }
+          } catch (emailErr) {
+            console.error('Error sending collection email:', emailErr);
+          }
+        }
+        
         setManualSearchResult({ 
           success: true, 
           data: data,
