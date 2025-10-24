@@ -120,6 +120,14 @@ const Navbar = () => {
 
           {/* User Section */}
           {user && (
+            <>
+              <Link to="/home" style={{color: 'white', textDecoration: 'none'}}>Home</Link>
+              <Link to="/wasteform" style={{color: 'white', textDecoration: 'none'}}>Add Waste</Link>
+              <Link to="/wastecollection" style={{color: 'white', textDecoration: 'none'}}>Waste Collection</Link>
+              <Link to="/special/schedule" style={{color: 'white', textDecoration: 'none'}}>Special Collection</Link>
+              <Link to="/special/manage" style={{color: 'white', textDecoration: 'none'}}>Manage Collections</Link>
+              <Link to="/profile" style={{color: 'white', textDecoration: 'none'}}>Profile</Link>
+            </>
             <div className="hidden md:flex items-center space-x-4">
               {/* User Info */}
               <div className="flex items-center space-x-2">
