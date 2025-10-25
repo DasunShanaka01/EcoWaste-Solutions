@@ -28,13 +28,6 @@ public class SpecialCollection {
     private String date; // yyyy-MM-dd
     private String timeSlot; // Morning / Afternoon
     private String location;
-    private String instructions;
-    private String status = "Pending";
-    private String paymentStatus = "Unpaid";
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    // getters & setters
-
     private Double latitude;
     private Double longitude;
     private String instructions;
@@ -81,8 +74,6 @@ public class SpecialCollection {
 
     public void setCategory(String category) {
         this.category = category;
-    }
-
         this.categoryEnum = WasteCategory.fromString(category);
     }
 
@@ -117,8 +108,6 @@ public class SpecialCollection {
 
     public void setQuantity(int quantity) {
         this.quantity = quantity;
-    }
-
         this.quantityObject = new Quantity(quantity);
     }
 
@@ -143,8 +132,6 @@ public class SpecialCollection {
 
     public void setFee(double fee) {
         this.fee = fee;
-    }
-
         this.feeObject = new Money(fee);
     }
 
@@ -179,8 +166,6 @@ public class SpecialCollection {
 
     public void setTimeSlot(String timeSlot) {
         this.timeSlot = timeSlot;
-    }
-
         this.timeSlotEnum = TimeSlot.fromString(timeSlot);
     }
 
@@ -270,8 +255,6 @@ public class SpecialCollection {
 
     public void setStatus(String status) {
         this.status = status;
-    }
-
         this.statusEnum = CollectionStatus.fromString(status);
     }
 
@@ -296,8 +279,6 @@ public class SpecialCollection {
 
     public void setPaymentStatus(String paymentStatus) {
         this.paymentStatus = paymentStatus;
-    }
-
         this.paymentStatusEnum = PaymentStatus.fromString(paymentStatus);
     }
 

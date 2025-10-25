@@ -1,6 +1,5 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:8080/api/special-collection";
 const API_URL = "http://localhost:8081/api/special-collection";
 
 const scApi = {

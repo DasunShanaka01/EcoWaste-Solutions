@@ -13,9 +13,6 @@ public interface SpecialCollectionService {
     SpecialCollection schedule(String userId, ScheduleRequest req);
     SpecialCollection reschedule(String userId, String collectionId, String date, String timeSlot);
     List<SpecialCollection> listUserCollections(String userId);
-    SpecialCollection markPaid(String userId, String collectionId);
-    SpecialCollection markCashPending(String userId, String collectionId);
-    SpecialCollection markUnpaid(String userId, String collectionId, String method);
     List<SpecialCollection> findAll();
     long count();
     SpecialCollection markPaid(String userId, String collectionId);
