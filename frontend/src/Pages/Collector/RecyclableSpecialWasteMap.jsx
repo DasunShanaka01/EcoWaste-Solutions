@@ -28,6 +28,12 @@ const RecyclableSpecialWasteMap = () => {
   const [paybackData, setPaybackData] = useState(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
   
+  // Actual weight update states
+  const [showWeightUpdate, setShowWeightUpdate] = useState(false);
+  const [actualWeight, setActualWeight] = useState('');
+  const [updatingWeight, setUpdatingWeight] = useState(false);
+  const [weightUpdateResult, setWeightUpdateResult] = useState(null);
+  
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAll, setShowAll] = useState(false);
   const [filteredRecyclableMarkers, setFilteredRecyclableMarkers] = useState([]);
@@ -476,6 +482,10 @@ const RecyclableSpecialWasteMap = () => {
     setShowPaybackConfirmation(false);
     setPaybackData(null);
     setUpdatingPayment(false);
+    setShowWeightUpdate(false);
+    setActualWeight('');
+    setUpdatingWeight(false);
+    setWeightUpdateResult(null);
   };
 
   // Handle QR code detection from camera
@@ -724,6 +734,86 @@ const RecyclableSpecialWasteMap = () => {
   const cancelPaybackConfirmation = () => {
     setShowPaybackConfirmation(false);
     setPaybackData(null);
+  };
+
+  // Update actual weight and recalculate payback
+  const updateActualWeight = async () => {
+    if (!actualWeight || actualWeight <= 0) {
+      alert('Please enter a valid weight');
+      return;
+    }
+
+    if (!manualSearchResult || !manualSearchResult.data) {
+      alert('No collection data available');
+      return;
+    }
+
+    setUpdatingWeight(true);
+    setWeightUpdateResult(null);
+
+    try {
+      const response = await fetch(`http://localhost:8081/api/waste/${manualSearchResult.data.simpleId}/actual-weight`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ actualWeight: parseFloat(actualWeight) }),
+      });
+
+      const data = await response.json();
+      console.log('Weight update response:', data);
+
+      if (response.ok) {
+        setWeightUpdateResult({
+          success: true,
+          actualWeight: data.actualWeightKg,
+          actualPayback: data.actualPaybackAmount,
+          actualDigitalWalletPoints: data.actualDigitalWalletPoints,
+          estimatedWeight: data.estimatedWeightKg,
+          estimatedPayback: data.estimatedPaybackAmount,
+          estimatedDigitalWalletPoints: data.estimatedDigitalWalletPoints,
+          category: data.category,
+          message: data.message
+        });
+
+        // Update the manual search result with new data
+        setManualSearchResult(prev => ({
+          ...prev,
+          data: {
+            ...prev.data,
+            actualWeightKg: data.actualWeightKg,
+            actualPaybackAmount: data.actualPaybackAmount,
+            actualDigitalWalletPoints: data.actualDigitalWalletPoints,
+            weight: data.actualWeightKg, // Update display weight
+            paybackAmount: data.actualPaybackAmount // Update display payback
+          }
+        }));
+
+        setShowWeightUpdate(false);
+        setActualWeight('');
+      } else {
+        setWeightUpdateResult({
+          success: false,
+          message: data.error || 'Failed to update weight'
+        });
+      }
+    } catch (err) {
+      console.error('Error updating weight:', err);
+      setWeightUpdateResult({
+        success: false,
+        message: 'Network error or server unreachable'
+      });
+    } finally {
+      setUpdatingWeight(false);
+    }
+  };
+
+  // Cancel weight update
+  const cancelWeightUpdate = () => {
+    setShowWeightUpdate(false);
+    setActualWeight('');
+    setWeightUpdateResult(null);
   };
 
   // Handle payment confirmation for special collections
@@ -1494,9 +1584,32 @@ const RecyclableSpecialWasteMap = () => {
                               <p><span className="font-medium">Simple ID:</span> {manualSearchResult.data.simpleId}</p>
                               <p><span className="font-medium">User:</span> {manualSearchResult.data.userName}</p>
                               <p><span className="font-medium">Category:</span> {manualSearchResult.data.category}</p>
-                              <p><span className="font-medium">Weight:</span> {manualSearchResult.data.weight}kg</p>
+                              
+                              {/* Weight Information */}
+                              <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                                <h5 className="font-semibold text-gray-800 mb-2">Weight Information</h5>
+                                <div className="grid grid-cols-2 gap-4 text-xs">
+                                  <div>
+                                    <p><span className="font-medium text-gray-600">Estimated Weight:</span> {manualSearchResult.data.weight}kg</p>
+                                    <p><span className="font-medium text-gray-600">Estimated Payback:</span> LKR {manualSearchResult.data.paybackAmount}</p>
+                                  </div>
+                                  {manualSearchResult.data.actualWeightKg ? (
+                                    <div>
+                                      <p><span className="font-medium text-green-600">Actual Weight:</span> {manualSearchResult.data.actualWeightKg}kg</p>
+                                      <p><span className="font-medium text-green-600">Actual Payback:</span> LKR {manualSearchResult.data.actualPaybackAmount}</p>
+                                      {manualSearchResult.data.actualDigitalWalletPoints && (
+                                        <p><span className="font-medium text-green-600">Digital Wallet Points:</span> {manualSearchResult.data.actualDigitalWalletPoints}</p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <p className="text-gray-500 italic">Not measured yet</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              
                               <p><span className="font-medium">Status:</span> {manualSearchResult.data.status}</p>
-                              <p><span className="font-medium">Payback Amount:</span> LKR {manualSearchResult.data.paybackAmount}</p>
                               <p><span className="font-medium">Payment Status:</span> 
                                 <span className={`ml-1 px-2 py-1 rounded text-xs ${
                                   manualSearchResult.data.paymentStatus === 'Complete' 
@@ -1526,10 +1639,21 @@ const RecyclableSpecialWasteMap = () => {
                             </div>
                           )}
                           
-                          <div className="mt-4 flex gap-2">
+                          <div className="mt-4 flex flex-wrap gap-2">
                             {manualSearchResult.isRecyclable ? (
                               // Two-step process for recyclable waste
                               <>
+                                {/* Update Actual Weight Button */}
+                                <button
+                                  onClick={() => setShowWeightUpdate(true)}
+                                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm flex items-center gap-1"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                  </svg>
+                                  Update Weight
+                                </button>
+                                
                                 {manualSearchResult.data.paymentStatus === 'Complete' ? (
                                   // Step 2: Mark as Collected (only after payment is complete)
                                   <button
@@ -1548,7 +1672,7 @@ const RecyclableSpecialWasteMap = () => {
                                     onClick={() => handlePaybackConfirmation(manualSearchResult.data)}
                                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                                   >
-                                    Confirm Payback (LKR {manualSearchResult.data.paybackAmount})
+                                    Confirm Payback (LKR {manualSearchResult.data.actualPaybackAmount || manualSearchResult.data.paybackAmount})
                                   </button>
                                 )}
                                 <button
@@ -1708,6 +1832,118 @@ const RecyclableSpecialWasteMap = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Weight Update Modal */}
+      {showWeightUpdate && manualSearchResult && manualSearchResult.data && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={cancelWeightUpdate}></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 p-8 max-w-md w-full transform transition-all duration-300">
+            <div className="text-center mb-6">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-purple-100 mb-4">
+                <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Update Actual Weight</h3>
+              <p className="text-sm text-gray-600">
+                Enter the actual weight measured during collection
+              </p>
+            </div>
+
+            {/* Current Weight Information */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="space-y-2 text-sm">
+                <p><span className="font-medium">Category:</span> {manualSearchResult.data.category}</p>
+                <p><span className="font-medium">Estimated Weight:</span> {manualSearchResult.data.weight}kg</p>
+                <p><span className="font-medium">Estimated Payback:</span> LKR {manualSearchResult.data.paybackAmount}</p>
+                {manualSearchResult.data.actualWeightKg && (
+                  <>
+                    <p><span className="font-medium text-green-600">Current Actual Weight:</span> {manualSearchResult.data.actualWeightKg}kg</p>
+                    <p><span className="font-medium text-green-600">Current Actual Payback:</span> LKR {manualSearchResult.data.actualPaybackAmount}</p>
+                    {manualSearchResult.data.actualDigitalWalletPoints && (
+                      <p><span className="font-medium text-green-600">Current Digital Wallet Points:</span> {manualSearchResult.data.actualDigitalWalletPoints}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Weight Input */}
+            <div className="mb-6">
+              <label htmlFor="actualWeight" className="block text-sm font-medium text-gray-700 mb-2">
+                Actual Weight (kg) *
+              </label>
+              <input
+                type="number"
+                id="actualWeight"
+                value={actualWeight}
+                onChange={(e) => setActualWeight(e.target.value)}
+                min="0"
+                step="0.1"
+                placeholder="Enter actual weight in kilograms"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter the weight measured with a scale during collection
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={cancelWeightUpdate}
+                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                disabled={updatingWeight}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={updateActualWeight}
+                disabled={updatingWeight || !actualWeight || actualWeight <= 0}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {updatingWeight ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Updating...
+                  </>
+                ) : (
+                  'Update Weight'
+                )}
+              </button>
+            </div>
+
+            {/* Weight Update Result */}
+            {weightUpdateResult && (
+              <div className={`mt-4 p-3 rounded-lg text-sm ${
+                weightUpdateResult.success 
+                  ? 'bg-green-50 border border-green-200 text-green-800' 
+                  : 'bg-red-50 border border-red-200 text-red-800'
+              }`}>
+                {weightUpdateResult.success ? (
+                  <div>
+                    <p className="font-semibold mb-2">✅ Weight Updated Successfully!</p>
+                    <div className="space-y-1 text-xs">
+                      <p><span className="font-medium">Actual Weight:</span> {weightUpdateResult.actualWeight}kg</p>
+                      <p><span className="font-medium">Actual Payback:</span> LKR {weightUpdateResult.actualPayback}</p>
+                      {weightUpdateResult.actualDigitalWalletPoints && (
+                        <p><span className="font-medium">Digital Wallet Points:</span> {weightUpdateResult.actualDigitalWalletPoints}</p>
+                      )}
+                      <p><span className="font-medium">Category Rate:</span> {manualSearchResult.data.category}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="font-semibold">❌ {weightUpdateResult.message}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

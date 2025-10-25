@@ -579,15 +579,28 @@ public class WasteController {
 				// Add points to Digital Wallet if payment status changed to "Complete"
 				if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus)) {
 					try {
+						// Use actual payback amount if available, otherwise use estimated amount
+						double paybackAmount = updatedWaste.getActualPaybackAmount() != null
+								? updatedWaste.getActualPaybackAmount()
+								: updatedWaste.getTotalPaybackAmount();
+
 						// Calculate points based on payback amount (1 point per LKR)
-						int pointsToAdd = (int) Math.round(updatedWaste.getTotalPaybackAmount());
+						int pointsToAdd = (int) Math.round(paybackAmount);
 						if (pointsToAdd > 0) {
+							String description = updatedWaste.getActualPaybackAmount() != null
+									? "Points earned from recyclable waste collection (actual weight) - "
+											+ updatedWaste.getId().toString()
+									: "Points earned from recyclable waste collection (estimated weight) - "
+											+ updatedWaste.getId().toString();
+
 							digitalWalletService.addPoints(
 									updatedWaste.getUserId(),
 									pointsToAdd,
-									"Points earned from recyclable waste collection - "
-											+ updatedWaste.getId().toString());
-							System.out.println("Added " + pointsToAdd + " points to user " + updatedWaste.getUserId());
+									description);
+							System.out.println("Added " + pointsToAdd + " points to user " + updatedWaste.getUserId() +
+									" (based on "
+									+ (updatedWaste.getActualPaybackAmount() != null ? "actual" : "estimated")
+									+ " weight)");
 						}
 					} catch (Exception e) {
 						System.err.println("Error adding points to digital wallet: " + e.getMessage());
@@ -613,6 +626,93 @@ public class WasteController {
 			errorResponse.put("error", "Error updating payment status: " + e.getMessage());
 			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
+	}
+
+	// Update actual weight and recalculate payback
+	@PutMapping("/{id}/actual-weight")
+	public ResponseEntity<Map<String, Object>> updateActualWeight(@PathVariable String id,
+			@RequestBody Map<String, Object> request) {
+		try {
+			Double actualWeight = ((Number) request.get("actualWeight")).doubleValue();
+			if (actualWeight == null || actualWeight <= 0) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Actual weight must be greater than 0");
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			Optional<Waste> wasteOpt = wasteService.findBySimpleId(id);
+			if (wasteOpt.isPresent()) {
+				Waste waste = wasteOpt.get();
+
+				// Get the category from the first item
+				String category = "E-waste"; // Default category
+				if (waste.getItems() != null && !waste.getItems().isEmpty()) {
+					category = waste.getItems().get(0).getCategory();
+				}
+
+				// Calculate actual payback amount based on category rates
+				double actualPaybackAmount = calculatePaybackAmount(actualWeight, category);
+
+				// Calculate actual digital wallet points (1 point per LKR)
+				Integer actualDigitalWalletPoints = (int) Math.round(actualPaybackAmount);
+
+				// Update the waste with actual weight, payback, and digital wallet points
+				waste.setActualWeightKg(actualWeight);
+				waste.setActualPaybackAmount(actualPaybackAmount);
+				waste.setActualDigitalWalletPoints(actualDigitalWalletPoints);
+
+				Waste updatedWaste = wasteService.updateWaste(waste);
+
+				Map<String, Object> response = new HashMap<>();
+				response.put("wasteId", updatedWaste.getId().toString());
+				response.put("simpleId", id);
+				response.put("actualWeightKg", updatedWaste.getActualWeightKg());
+				response.put("actualPaybackAmount", updatedWaste.getActualPaybackAmount());
+				response.put("actualDigitalWalletPoints", updatedWaste.getActualDigitalWalletPoints());
+				response.put("estimatedWeightKg", updatedWaste.getTotalWeightKg());
+				response.put("estimatedPaybackAmount", updatedWaste.getTotalPaybackAmount());
+				response.put("estimatedDigitalWalletPoints", updatedWaste.getDigitalWalletPoints());
+				response.put("category", category);
+				response.put("message", "Actual weight, payback, and digital wallet points updated successfully");
+				return new ResponseEntity<>(response, HttpStatus.OK);
+			} else {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Waste not found with ID: " + id);
+				return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new HashMap<>();
+			errorResponse.put("error", "Error updating actual weight: " + e.getMessage());
+			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	// Helper method to calculate payback amount based on category
+	private double calculatePaybackAmount(double weight, String category) {
+		// Rates per kg in LKR (matching frontend rates)
+		double ratePerKg;
+		switch (category.toLowerCase()) {
+			case "e-waste":
+				ratePerKg = 15.00;
+				break;
+			case "plastic":
+				ratePerKg = 8.00;
+				break;
+			case "glass":
+				ratePerKg = 6.00;
+				break;
+			case "aluminum":
+				ratePerKg = 12.00;
+				break;
+			case "paper/cardboard":
+				ratePerKg = 4.00;
+				break;
+			default:
+				ratePerKg = 5.00; // Default rate
+				break;
+		}
+		return weight * ratePerKg;
 	}
 
 	// Send collection email notification

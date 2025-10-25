@@ -865,7 +865,7 @@ const WasteForm = () => {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Weight (kg) *</label>
+                      <label className="block text-sm font-medium mb-2">Estimated Weight (kg) *</label>
                       <input
                         type="number"
                         name="weight"
@@ -873,11 +873,11 @@ const WasteForm = () => {
                         onChange={handleInputChange}
                         min="0"
                         step="0.1"
-                        placeholder="Enter weight in kilograms"
+                        placeholder="Enter estimated weight in kilograms"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">Example: 2.5 kg</p>
+                      <p className="text-xs text-gray-500 mt-1">Example: 2.5 kg - This is an estimate. Actual weight will be measured during collection.</p>
                       
                       {formData.selectedCategory && formData.weight > 0 && (
                         <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -889,8 +889,11 @@ const WasteForm = () => {
                           </div>
                           <div className="flex justify-between items-center mt-1">
                             <span className="text-xs text-green-700">Rate: LKR {getRatePerKg(formData.selectedCategory).toFixed(2)}/kg</span>
-                            <span className="text-xs text-green-700">Weight: {formData.weight} kg</span>
+                            <span className="text-xs text-green-700">Est. Weight: {formData.weight} kg</span>
                           </div>
+                          <p className="text-xs text-green-600 mt-2 italic">
+                            * Final payback will be calculated based on actual weight measured during collection
+                          </p>
                         </div>
                       )}
                     </div>
@@ -900,8 +903,8 @@ const WasteForm = () => {
 
               {currentStep === 4 && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-2">Payback Calculation</h2>
-                  <p className="text-gray-600 mb-8">Review your estimated payback amount</p>
+                  <h2 className="text-2xl font-bold mb-2">Estimated Payback Calculation</h2>
+                  <p className="text-gray-600 mb-8">Review your estimated payback amount (final amount will be based on actual weight measured during collection)</p>
                   
                   <div className="max-w-4xl space-y-6">
                     {/* Current Submission Calculation */}
@@ -913,7 +916,7 @@ const WasteForm = () => {
                           <span>{formData.selectedCategory || 'Not selected'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="font-medium">Total Weight:</span>
+                          <span className="font-medium">Estimated Weight:</span>
                           <span>{formData.weight || 0} kg</span>
                         </div>
                         <div className="flex justify-between">
@@ -1475,7 +1478,7 @@ const WasteForm = () => {
                           <div className="space-y-2 text-sm">
                             <p><span className="font-medium">Method:</span> {formData.submissionMethod}</p>
                             <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
-                            <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
+                            <p><span className="font-medium">Estimated Weight:</span> {formData.weight} kg</p>
                             <p><span className="font-medium">Estimated Payback:</span> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</p>
                             <p><span className="font-medium">Payback Method:</span> {formData.paybackMethod}</p>
                             {formData.paybackMethod === 'Bank Transfer' && (

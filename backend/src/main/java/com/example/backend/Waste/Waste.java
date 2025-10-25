@@ -27,8 +27,11 @@ public class Waste {
     // Status: only two states used by the collector UI: "Pending" and "Complete"
     private String status = "Pending"; // default to Pending for new submissions
     private PickupDetails pickup;
-    private double totalWeightKg;
-    private double totalPaybackAmount;
+    private double totalWeightKg; // Estimated weight from user
+    private double totalPaybackAmount; // Estimated payback amount
+    private Double actualWeightKg; // Actual weight measured by collector
+    private Double actualPaybackAmount; // Actual payback amount calculated from actual weight
+    private Integer actualDigitalWalletPoints; // Actual digital wallet points based on actual payback amount
     private String paymentMethod;
     private String paymentStatus;
     private String paybackMethod; // Bank Transfer, Digital Wallet, Donation
