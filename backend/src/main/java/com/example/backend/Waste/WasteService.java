@@ -77,7 +77,6 @@ public class WasteService {
                     status,
                     totalPaybackAmount,
                     phoneNumber);
-            String qrCodeBase64 = qrCodeService.generateQRCodeBase64(qrData);
             String qrCodeBase64 = qrCodeService.generateQRCodeBase64(qrData, 200, 200);
             savedWaste.setQrCodeBase64(qrCodeBase64);
             return wasteRepository.save(savedWaste);

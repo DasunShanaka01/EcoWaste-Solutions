@@ -8,7 +8,6 @@ public interface EmailService {
 
     void sendPaymentNotification(String email, String collectionId, double amount, String method, boolean success);
 
-    void sendReportEmail(String email, String reportTitle, String reportContent, String reportUrl);
     void sendCollectionCompletedNotification(String email, String collectionId, String date, String timeSlot);
 
     void sendRecyclableWasteCollectedNotification(String email, String wasteId, String category, double weight,

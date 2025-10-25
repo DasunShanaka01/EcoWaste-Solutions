@@ -1477,21 +1477,6 @@ const WasteForm = () => {
                             <p><span className="font-medium">Category:</span> {formData.selectedCategory}</p>
                             <p><span className="font-medium">Weight:</span> {formData.weight} kg</p>
                             <p><span className="font-medium">Estimated Payback:</span> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}</p>
-                            {formData.submissionMethod === 'Home Pickup' && (
-                              <>
-                                <p><span className="font-medium">Pickup Date:</span> {formData.pickupDate}</p>
-                                <p><span className="font-medium">Time Slot:</span> {formData.pickupTimeSlot}</p>
-                                {formData.locationAvailable ? (
-                                  <p><span className="font-medium">Location:</span> GPS Coordinates Captured</p>
-                                ) : (
-                                  <>
-                                    <p><span className="font-medium">Address:</span> {formData.address}</p>
-                                    <p><span className="font-medium">City:</span> {formData.city}</p>
-                                    <p><span className="font-medium">Zip Code:</span> {formData.zipCode}</p>
-                                  </>
-                                )}
-                              </>
-                            )}
                             <p><span className="font-medium">Payback Method:</span> {formData.paybackMethod}</p>
                             {formData.paybackMethod === 'Bank Transfer' && (
                               <>

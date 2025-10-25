@@ -24,7 +24,6 @@ public class SpecialCollectionDTOs {
         public String date;     // yyyy-MM-dd
         public String timeSlot; // Morning or Afternoon
         public String location; // front door, garage, lobby
-        public String instructions;
         public GeoLocation coordinates;
         public String instructions;
         public String paymentMethod; // Cash, Card, Bank, etc.
