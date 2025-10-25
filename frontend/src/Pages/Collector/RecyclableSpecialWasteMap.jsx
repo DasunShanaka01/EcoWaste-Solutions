@@ -158,8 +158,15 @@ const RecyclableSpecialWasteMap = () => {
       console.log('All categories found in database:', uniqueCategories);
       
       // Filter for recyclable waste items - make it more flexible
+      // Also exclude completed and paid collections
       const recyclableWastes = wastesList.filter(waste => {
         if (!waste.items || !Array.isArray(waste.items)) return false;
+        
+        // Exclude collections that are both collected and paid
+        if (waste.status === 'Collected' && waste.paymentStatus === 'Complete') {
+          return false;
+        }
+        
         return waste.items.some(item => {
           const category = item.category ? item.category.toLowerCase() : '';
           return category.includes('recyclable') || 
@@ -170,7 +177,24 @@ const RecyclableSpecialWasteMap = () => {
                  category.includes('cardboard');
         });
       });
+      
+      // Count how many were filtered out due to being completed
+      const completedAndPaidCount = wastesList.filter(waste => {
+        if (!waste.items || !Array.isArray(waste.items)) return false;
+        return waste.status === 'Collected' && waste.paymentStatus === 'Complete' &&
+               waste.items.some(item => {
+                 const category = item.category ? item.category.toLowerCase() : '';
+                 return category.includes('recyclable') || 
+                        category.includes('plastic') || 
+                        category.includes('paper') || 
+                        category.includes('glass') || 
+                        category.includes('metal') ||
+                        category.includes('cardboard');
+               });
+      }).length;
+      
       console.log('Filtered recyclable wastes:', recyclableWastes.length);
+      console.log('Completed and paid collections filtered out:', completedAndPaidCount);
       console.log('Sample waste item categories:', wastesList.slice(0, 3).map(w => w.items?.map(i => i.category)));
 
       const recyclableMarkersList = recyclableWastes.map((w, idx) => {
@@ -1014,6 +1038,9 @@ const RecyclableSpecialWasteMap = () => {
                 />
                 <span className="text-sm text-gray-700">
                   Recyclable Waste ({filteredRecyclableMarkers.length})
+                </span>
+                <span className="text-xs text-gray-500">
+                  (Completed & paid collections hidden)
                 </span>
               </div>
               <div className="flex items-center gap-2">

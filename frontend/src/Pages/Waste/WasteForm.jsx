@@ -48,8 +48,44 @@ const WasteForm = () => {
     charityOrganization: ''
   });
   
+  // State for digital wallet balance
+  const [digitalWalletBalance, setDigitalWalletBalance] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(false);
+  
   // State for storing submitted waste data and QR code
   const [submittedWaste, setSubmittedWaste] = useState(null);
+
+  // Function to fetch digital wallet balance
+  const fetchDigitalWalletBalance = async (userId) => {
+    if (!userId) return;
+    
+    setWalletLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8081/api/digital-wallet/${userId}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        const wallet = await response.json();
+        setDigitalWalletBalance(wallet.points || 0);
+        setFormData(prev => ({
+          ...prev,
+          digitalWalletPoints: wallet.points || 0
+        }));
+      } else {
+        console.error("Failed to fetch digital wallet balance");
+        setDigitalWalletBalance(0);
+      }
+    } catch (err) {
+      console.error("Error fetching digital wallet balance:", err);
+      setDigitalWalletBalance(0);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
 
   // Populate form with current user data
   useEffect(() => {
@@ -61,6 +97,9 @@ const WasteForm = () => {
         phoneNumber: user.phone || '',
         email: user.email || ''
       }));
+      
+      // Fetch digital wallet balance
+      fetchDigitalWalletBalance(user.id || user._id);
     }
   }, [user, loading]);
 
@@ -1097,6 +1136,9 @@ const WasteForm = () => {
                           <p className="text-sm text-blue-800">
                             <strong>Amount to be transferred:</strong> LKR {calculatePayback(formData.weight, formData.selectedCategory).toFixed(2)}
                           </p>
+                          <p className="text-xs text-blue-600 mt-1">
+                            * No digital wallet points will be added for bank transfer payments
+                          </p>
                         </div>
                       </div>
                     )}
@@ -1113,25 +1155,37 @@ const WasteForm = () => {
                               </svg>
                             </div>
                             <div>
-                              <p className="font-medium text-purple-800">Points will be added to your account</p>
+                              <p className="font-medium text-purple-800">Points will be added to your digital wallet</p>
                               <p className="text-sm text-purple-600">
                                 You will receive {Math.round(calculatePayback(formData.weight, formData.selectedCategory))} points
+                              </p>
+                              <p className="text-xs text-purple-500 mt-1">
+                                * Points are only added when Digital Wallet is selected as payback method
                               </p>
                             </div>
                           </div>
                           <div className="bg-white rounded-lg p-4 border border-purple-200">
-                            <div className="flex justify-between items-center">
-                              <span className="text-purple-700 font-medium">Current Points:</span>
-                              <span className="text-lg font-bold text-purple-600">{formData.digitalWalletPoints}</span>
-                            </div>
-                            <div className="flex justify-between items-center mt-2">
-                              <span className="text-purple-700 font-medium">Points to be added:</span>
-                              <span className="text-lg font-bold text-green-600">+{Math.round(calculatePayback(formData.weight, formData.selectedCategory))}</span>
-                            </div>
-                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-purple-200">
-                              <span className="text-purple-700 font-medium">New Total:</span>
-                              <span className="text-xl font-bold text-purple-600">{formData.digitalWalletPoints + Math.round(calculatePayback(formData.weight, formData.selectedCategory))}</span>
-                            </div>
+                            {walletLoading ? (
+                              <div className="flex items-center justify-center py-4">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                                <span className="ml-2 text-purple-600">Loading wallet balance...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-purple-700 font-medium">Current Points:</span>
+                                  <span className="text-lg font-bold text-purple-600">{digitalWalletBalance}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-2">
+                                  <span className="text-purple-700 font-medium">Estimated Points to be added:</span>
+                                  <span className="text-lg font-bold text-green-600">+{Math.round(calculatePayback(formData.weight, formData.selectedCategory))}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-purple-200">
+                                  <span className="text-purple-700 font-medium">Estimated New Total Points:</span>
+                                  <span className="text-xl font-bold text-purple-600">{digitalWalletBalance + Math.round(calculatePayback(formData.weight, formData.selectedCategory))}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1169,6 +1223,9 @@ const WasteForm = () => {
                             </div>
                             <p className="text-sm text-red-600 mt-2">
                               Your payback amount will be donated to the selected charity organization.
+                            </p>
+                            <p className="text-xs text-red-500 mt-1">
+                              * No digital wallet points will be added for donations
                             </p>
                           </div>
                         </div>
@@ -1489,7 +1546,11 @@ const WasteForm = () => {
                               </>
                             )}
                             {formData.paybackMethod === 'Digital Wallet' && (
-                              <p><span className="font-medium">Points to be added:</span> {Math.round(calculatePayback(formData.weight, formData.selectedCategory))} points</p>
+                              <>
+                                <p><span className="font-medium">Current Points:</span> {digitalWalletBalance} points</p>
+                                <p><span className="font-medium">Points to be added:</span> {Math.round(calculatePayback(formData.weight, formData.selectedCategory))} points</p>
+                                <p><span className="font-medium">New Total:</span> {digitalWalletBalance + Math.round(calculatePayback(formData.weight, formData.selectedCategory))} points</p>
+                              </>
                             )}
                             {formData.paybackMethod === 'Donation' && (
                               <p><span className="font-medium">Charity Organization:</span> {formData.charityOrganization}</p>

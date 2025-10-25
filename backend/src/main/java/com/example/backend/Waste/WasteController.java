@@ -576,8 +576,10 @@ public class WasteController {
 					System.out.println("ERROR: Could not find waste after update for verification!");
 				}
 
-				// Add points to Digital Wallet if payment status changed to "Complete"
-				if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus)) {
+				// Add points to Digital Wallet only if payment status changed to "Complete" AND
+				// payback method is "Digital Wallet"
+				if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus) &&
+						"Digital Wallet".equals(updatedWaste.getPaybackMethod())) {
 					try {
 						// Use actual payback amount if available, otherwise use estimated amount
 						double paybackAmount = updatedWaste.getActualPaybackAmount() != null
@@ -600,12 +602,16 @@ public class WasteController {
 							System.out.println("Added " + pointsToAdd + " points to user " + updatedWaste.getUserId() +
 									" (based on "
 									+ (updatedWaste.getActualPaybackAmount() != null ? "actual" : "estimated")
-									+ " weight)");
+									+ " weight) - Payback method: " + updatedWaste.getPaybackMethod());
 						}
 					} catch (Exception e) {
 						System.err.println("Error adding points to digital wallet: " + e.getMessage());
 						// Don't fail the payment status update if digital wallet update fails
 					}
+				} else if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus)) {
+					// Log that no points were added for non-digital wallet payback methods
+					System.out.println("Payment confirmed for user " + updatedWaste.getUserId() +
+							" but no digital wallet points added - Payback method: " + updatedWaste.getPaybackMethod());
 				}
 
 				Map<String, Object> response = new HashMap<>();
