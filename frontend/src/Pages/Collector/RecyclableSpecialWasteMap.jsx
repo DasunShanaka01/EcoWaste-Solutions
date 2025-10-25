@@ -853,7 +853,7 @@ const RecyclableSpecialWasteMap = () => {
     setUpdatingPayment(true);
     
     try {
-      const response = await fetch(`http://localhost:8081/api/special-collection/${paybackData.simpleId}/payment-status`, {
+      const response = await fetch(`http://localhost:8081/api/special-collection/${paybackData.id}/payment-status`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
