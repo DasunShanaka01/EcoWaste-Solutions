@@ -1,8 +1,5 @@
 package com.example.backend.Waste;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,27 +21,47 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.example.backend.service.EmailService;
-import com.example.backend.service.DigitalWalletService;
+import com.example.backend.service.RecyclableWasteService;
+import com.example.backend.service.FileUploadService;
+import com.example.backend.validator.RecyclableWasteValidator;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * REST Controller for waste-related operations
+ * 
+ * SOLID PRINCIPLES APPLIED:
+ * - Single Responsibility Principle (SRP): This class has a single
+ * responsibility - handling HTTP requests for waste operations
+ * - Open/Closed Principle (OCP): Extends functionality through delegation to
+ * services without modifying existing code
+ * - Liskov Substitution Principle (LSP): Can work with any service
+ * implementations that follow their contracts
+ * - Interface Segregation Principle (ISP): Uses focused service interfaces
+ * rather than large, monolithic ones
+ * - Dependency Inversion Principle (DIP): Depends on abstractions (services)
+ * rather than concrete implementations
+ */
 @RestController
 @RequestMapping("/api/waste")
 @RequiredArgsConstructor
 public class WasteController {
 
+	// SOLID PRINCIPLE: Dependency Inversion Principle (DIP)
+	// Depends on abstractions (service interfaces) rather than concrete
+	// implementations
 	private final WasteService wasteService;
+	private final RecyclableWasteService recyclableWasteService;
+	private final FileUploadService fileUploadService;
+	private final RecyclableWasteValidator validator;
 
+	// SOLID PRINCIPLE: Dependency Inversion Principle (DIP)
+	// Uses Spring's dependency injection for ObjectMapper and EmailService
 	@Autowired
 	private ObjectMapper objectMapper;
 
 	@Autowired
 	private EmailService emailService;
-
-	@Autowired
-	private DigitalWalletService digitalWalletService;
-
-	private static final String UPLOAD_DIR = "uploads/";
 
 	@GetMapping("/wastes")
 	public ResponseEntity<List<Waste>> getAllWastes() {
@@ -62,7 +79,9 @@ public class WasteController {
 		return new ResponseEntity<>("Waste API is working!", HttpStatus.OK);
 	}
 
-	// Insert waste with image
+	// SOLID PRINCIPLE: Single Responsibility Principle (SRP)
+	// This method has a single responsibility - handling waste submission requests
+	// Insert waste with image - Refactored to follow SOLID principles
 	@PostMapping(value = "/add", consumes = "multipart/form-data")
 	public ResponseEntity<?> save(
 			@RequestPart("userId") String userId,
@@ -88,33 +107,15 @@ public class WasteController {
 			double totalWeightKg = Double.parseDouble(totalWeightKgStr);
 			double totalPaybackAmount = Double.parseDouble(totalPaybackAmountStr);
 
-			// Parse JSON strings to objects
-			// Using injected ObjectMapper with JSR310 configuration
-			ObjectMapper objectMapper = new ObjectMapper();
+			// Parse JSON strings to objects using ObjectMapper
 			Waste.PickupDetails pickup = objectMapper.readValue(pickupJson, Waste.PickupDetails.class);
 			List<Waste.Item> items = objectMapper.readValue(itemsJson,
 					objectMapper.getTypeFactory().constructCollectionType(List.class, Waste.Item.class));
 			Waste.GeoLocation location = objectMapper.readValue(locationJson, Waste.GeoLocation.class);
 
-			String imageUrl = null;
-			if (imageFile != null && !imageFile.isEmpty()) {
-				try {
-					// Create upload directory if it doesn't exist
-					Path uploadPath = Paths.get(UPLOAD_DIR);
-					Files.createDirectories(uploadPath);
-
-					// Generate unique filename to avoid conflicts
-					String filename = System.currentTimeMillis() + "_" + imageFile.getOriginalFilename();
-					Path filePath = uploadPath.resolve(filename);
-
-					// Save the file
-					Files.write(filePath, imageFile.getBytes());
-					imageUrl = "/uploads/" + filename;
-				} catch (Exception e) {
-					System.err.println("Error saving image file: " + e.getMessage());
-					// Continue without image if file save fails
-				}
-			}
+			// SOLID PRINCIPLE: Single Responsibility Principle (SRP)
+			// Delegates file upload responsibility to dedicated service
+			String imageUrl = fileUploadService.saveFile(imageFile);
 
 			// Parse payback method specific details
 			Waste.BankTransferDetails bankTransferDetails = null;
@@ -128,10 +129,59 @@ public class WasteController {
 				digitalWalletPoints = Integer.parseInt(digitalWalletPointsStr);
 			}
 
+			// Create Waste object
+			Waste waste = new Waste();
+			waste.setUserId(userId);
+			waste.setFullName(fullName);
+			waste.setPhoneNumber(phoneNumber);
+			waste.setEmail(email);
+			waste.setSubmissionMethod(submissionMethod);
+			waste.setStatus(status);
+			waste.setPickup(pickup);
+			waste.setTotalWeightKg(totalWeightKg);
+			waste.setTotalPaybackAmount(totalPaybackAmount);
+			waste.setPaymentMethod(paymentMethod);
+			waste.setPaymentStatus(paymentStatus);
+			waste.setPaybackMethod(paybackMethod);
+			waste.setBankTransferDetails(bankTransferDetails);
+			waste.setDigitalWalletPoints(digitalWalletPoints);
+			waste.setCharityOrganization(charityOrganization);
+			waste.setItems(items);
+			waste.setImageUrl(imageUrl);
+			waste.setLocation(location);
+
+			// SOLID PRINCIPLE: Single Responsibility Principle (SRP)
+			// Delegates validation responsibility to dedicated validator
+			List<String> validationErrors = validator.validateWasteSubmission(waste);
+			if (!validationErrors.isEmpty()) {
+				Map<String, Object> errorResponse = new HashMap<>();
+				errorResponse.put("error", "Validation failed");
+				errorResponse.put("details", validationErrors);
+				return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+			}
+
+			// SOLID PRINCIPLE: Single Responsibility Principle (SRP)
+			// Delegates file validation responsibility to dedicated validator
+			if (imageFile != null && !imageFile.isEmpty()) {
+				List<String> fileErrors = validator.validateFileUpload(imageFile);
+				if (!fileErrors.isEmpty()) {
+					Map<String, Object> errorResponse = new HashMap<>();
+					errorResponse.put("error", "File validation failed");
+					errorResponse.put("details", fileErrors);
+					return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+				}
+			}
+
+			// SOLID PRINCIPLE: Single Responsibility Principle (SRP)
+			// Delegates waste processing responsibility to dedicated service
+			waste = recyclableWasteService.processSubmission(waste);
+
+			// Save using original service (maintaining backward compatibility)
 			Waste savedWaste = wasteService.save(userId, fullName, phoneNumber, email, submissionMethod, status, pickup,
 					totalWeightKg, totalPaybackAmount, paymentMethod,
 					paymentStatus, paybackMethod, bankTransferDetails, digitalWalletPoints, charityOrganization, items,
 					imageUrl, location);
+
 			return new ResponseEntity<>(savedWaste, HttpStatus.CREATED);
 		} catch (Exception e) {
 			System.err.println("Error in waste submission: " + e.getMessage());
@@ -180,9 +230,7 @@ public class WasteController {
 
 			String imageUrl = null;
 			if (imageFile != null && !imageFile.isEmpty()) {
-				String filePath = UPLOAD_DIR + imageFile.getOriginalFilename();
-				imageFile.transferTo(new java.io.File(filePath));
-				imageUrl = filePath;
+				imageUrl = fileUploadService.saveFile(imageFile);
 			}
 
 			Optional<Waste> existingWaste = wasteService.findById(id);
@@ -205,11 +253,7 @@ public class WasteController {
 
 				// Handle image file if provided
 				if (imageUrl != null && !imageUrl.isEmpty() && imageFile != null) {
-					String filename = System.currentTimeMillis() + "_" + imageFile.getOriginalFilename();
-					Path filePath = Paths.get(UPLOAD_DIR, filename);
-					Files.createDirectories(filePath.getParent());
-					Files.write(filePath, imageFile.getBytes());
-					wasteToUpdate.setImageUrl("/uploads/" + filename);
+					wasteToUpdate.setImageUrl(imageUrl);
 				}
 
 				Waste updatedWaste = wasteService.update(wasteToUpdate);
@@ -543,7 +587,7 @@ public class WasteController {
 		}
 	}
 
-	// Update payment status by simple ID
+	// Update payment status by simple ID - Refactored to use payback strategies
 	@PutMapping("/{id}/payment-status")
 	public ResponseEntity<Map<String, Object>> updatePaymentStatus(@PathVariable String id,
 			@RequestBody Map<String, String> request) {
@@ -568,50 +612,22 @@ public class WasteController {
 
 				System.out.println("Updated waste payment status: " + updatedWaste.getPaymentStatus());
 
-				// Verify the update by fetching from database again
-				Optional<Waste> verifyWaste = wasteService.findBySimpleId(id);
-				if (verifyWaste.isPresent()) {
-					System.out.println("Verification - Payment status in DB: " + verifyWaste.get().getPaymentStatus());
-				} else {
-					System.out.println("ERROR: Could not find waste after update for verification!");
-				}
-
-				// Add points to Digital Wallet only if payment status changed to "Complete" AND
-				// payback method is "Digital Wallet"
-				if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus) &&
-						"Digital Wallet".equals(updatedWaste.getPaybackMethod())) {
+				// Process payback using strategy pattern
+				if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus)) {
 					try {
-						// Use actual payback amount if available, otherwise use estimated amount
-						double paybackAmount = updatedWaste.getActualPaybackAmount() != null
-								? updatedWaste.getActualPaybackAmount()
-								: updatedWaste.getTotalPaybackAmount();
+						// Use recyclable waste service to process payback
+						com.example.backend.strategy.PaybackStrategy.PaybackResult paybackResult = recyclableWasteService
+								.processPayback(updatedWaste);
 
-						// Calculate points based on payback amount (1 point per LKR)
-						int pointsToAdd = (int) Math.round(paybackAmount);
-						if (pointsToAdd > 0) {
-							String description = updatedWaste.getActualPaybackAmount() != null
-									? "Points earned from recyclable waste collection (actual weight) - "
-											+ updatedWaste.getId().toString()
-									: "Points earned from recyclable waste collection (estimated weight) - "
-											+ updatedWaste.getId().toString();
-
-							digitalWalletService.addPoints(
-									updatedWaste.getUserId(),
-									pointsToAdd,
-									description);
-							System.out.println("Added " + pointsToAdd + " points to user " + updatedWaste.getUserId() +
-									" (based on "
-									+ (updatedWaste.getActualPaybackAmount() != null ? "actual" : "estimated")
-									+ " weight) - Payback method: " + updatedWaste.getPaybackMethod());
+						if (paybackResult.isSuccess()) {
+							System.out.println("Payback processed successfully: " + paybackResult.getMessage());
+						} else {
+							System.err.println("Payback processing failed: " + paybackResult.getMessage());
 						}
 					} catch (Exception e) {
-						System.err.println("Error adding points to digital wallet: " + e.getMessage());
-						// Don't fail the payment status update if digital wallet update fails
+						System.err.println("Error processing payback: " + e.getMessage());
+						// Don't fail the payment status update if payback processing fails
 					}
-				} else if ("Complete".equals(newPaymentStatus) && !"Complete".equals(oldPaymentStatus)) {
-					// Log that no points were added for non-digital wallet payback methods
-					System.out.println("Payment confirmed for user " + updatedWaste.getUserId() +
-							" but no digital wallet points added - Payback method: " + updatedWaste.getPaybackMethod());
 				}
 
 				Map<String, Object> response = new HashMap<>();
@@ -634,7 +650,8 @@ public class WasteController {
 		}
 	}
 
-	// Update actual weight and recalculate payback
+	// Update actual weight and recalculate payback - Refactored to use recyclable
+	// waste service
 	@PutMapping("/{id}/actual-weight")
 	public ResponseEntity<Map<String, Object>> updateActualWeight(@PathVariable String id,
 			@RequestBody Map<String, Object> request) {
@@ -656,8 +673,8 @@ public class WasteController {
 					category = waste.getItems().get(0).getCategory();
 				}
 
-				// Calculate actual payback amount based on category rates
-				double actualPaybackAmount = calculatePaybackAmount(actualWeight, category);
+				// Calculate actual payback amount using recyclable waste service
+				double actualPaybackAmount = recyclableWasteService.calculatePaybackAmount(actualWeight, category);
 
 				// Calculate actual digital wallet points (1 point per LKR)
 				Integer actualDigitalWalletPoints = (int) Math.round(actualPaybackAmount);
@@ -679,6 +696,7 @@ public class WasteController {
 				response.put("estimatedPaybackAmount", updatedWaste.getTotalPaybackAmount());
 				response.put("estimatedDigitalWalletPoints", updatedWaste.getDigitalWalletPoints());
 				response.put("category", category);
+				response.put("ratePerKg", recyclableWasteService.getRatePerKg(category));
 				response.put("message", "Actual weight, payback, and digital wallet points updated successfully");
 				return new ResponseEntity<>(response, HttpStatus.OK);
 			} else {
@@ -692,33 +710,6 @@ public class WasteController {
 			errorResponse.put("error", "Error updating actual weight: " + e.getMessage());
 			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
-	}
-
-	// Helper method to calculate payback amount based on category
-	private double calculatePaybackAmount(double weight, String category) {
-		// Rates per kg in LKR (matching frontend rates)
-		double ratePerKg;
-		switch (category.toLowerCase()) {
-			case "e-waste":
-				ratePerKg = 15.00;
-				break;
-			case "plastic":
-				ratePerKg = 8.00;
-				break;
-			case "glass":
-				ratePerKg = 6.00;
-				break;
-			case "aluminum":
-				ratePerKg = 12.00;
-				break;
-			case "paper/cardboard":
-				ratePerKg = 4.00;
-				break;
-			default:
-				ratePerKg = 5.00; // Default rate
-				break;
-		}
-		return weight * ratePerKg;
 	}
 
 	// Send collection email notification
@@ -754,6 +745,30 @@ public class WasteController {
 			errorResponse.put("error", "Failed to send collection email: " + e.getMessage());
 			return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
 		}
+	}
+
+	// Get supported categories - New endpoint following SOLID principles
+	@GetMapping("/categories")
+	public ResponseEntity<List<String>> getSupportedCategories() {
+		List<String> categories = recyclableWasteService.getSupportedCategories();
+		return new ResponseEntity<>(categories, HttpStatus.OK);
+	}
+
+	// Get supported payback methods - New endpoint following SOLID principles
+	@GetMapping("/payback-methods")
+	public ResponseEntity<List<String>> getSupportedPaybackMethods() {
+		List<String> paybackMethods = recyclableWasteService.getSupportedPaybackMethods();
+		return new ResponseEntity<>(paybackMethods, HttpStatus.OK);
+	}
+
+	// Get rate per kg for category - New endpoint following SOLID principles
+	@GetMapping("/rate/{category}")
+	public ResponseEntity<Map<String, Object>> getRatePerKg(@PathVariable String category) {
+		double rate = recyclableWasteService.getRatePerKg(category);
+		Map<String, Object> response = new HashMap<>();
+		response.put("category", category);
+		response.put("ratePerKg", rate);
+		return new ResponseEntity<>(response, HttpStatus.OK);
 	}
 
 }
